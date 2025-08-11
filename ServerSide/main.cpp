@@ -1,7 +1,9 @@
-#include <iostream>
+#include "Smh_Server_App.hpp"
+#include "Defines.hpp"
 
-int main(int argc, char const *argv[])
+int main()
 {
-    /* code */
+    App app(DEFAULT_SERVER_PORT);
+    app.run();
     return 0;
 }
