@@ -3,7 +3,7 @@
 
 int main()
 {
-    App app(DEFAULT_SERVER_PORT);
+    smh::App app(DEFAULT_SERVER_PORT);
     app.run();
     return 0;
 }

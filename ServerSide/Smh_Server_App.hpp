@@ -8,10 +8,10 @@
 
 #include "Defines.hpp"
 #include "Message.hpp"
+#include "Smh_File_Helper.hpp"
 
 namespace smh
 {
-
     class App
     {
     private:
@@ -20,6 +20,8 @@ namespace smh
         bool running = false;
         std::vector<std::thread> threads;
         std::mutex cout_mutex;
+
+        Smh_File_Helper file_help;
 
         void lock_and_print(std::string str)
         {
@@ -116,7 +118,9 @@ namespace smh
         }
 
     public:
-        App(int port_number) : port(port_number) {}
+        App(int port_number) : port(port_number), file_help(true)
+        {
+        }
 
         ~App()
         {
