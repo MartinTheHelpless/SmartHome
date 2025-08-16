@@ -1,5 +1,8 @@
+#pragma once
+
 #include <cstdint>
 #include <cstring>
+#include "../../Utils/Defines.hpp"
 
 namespace smh
 {

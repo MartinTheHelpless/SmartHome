@@ -1,3 +1,5 @@
+#pragma once
+
 #include <gpiod.h>
 #include <iostream>
 

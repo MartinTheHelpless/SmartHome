@@ -1,3 +1,5 @@
+#pragma once
+
 #include "GPIO_Helper.hpp"
 #include "Smh_Object.hpp"
 #include "Header.hpp"

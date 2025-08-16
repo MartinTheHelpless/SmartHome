@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdint>
 
 #define CURRENT_PROTOCOL_VERSION 1.0
@@ -18,18 +20,18 @@ enum Smh_Msg_Type : uint8_t
     MSG_TYPE_PING = 2,        // Keepalive message
     MSG_TYPE_SUBSCRIBE = 3,   // Subscribe to a device info
     MSG_TYPE_UNSUBSCRIBE = 4, // Unsubscribe to a device info
-    MSG_TYPE_CONTROLL = 5     // Controll destination device
+    MSG_TYPE_CONTROLL = 5     // Controll destination device peripherals
 };
 static_assert(sizeof(Smh_Msg_Type) == 1, "Smh_Msg_Type must be 1 byte");
 
-#define SMH_FLAG_RESPONSE 10000000 // Expecting a response
-#define SMH_IS_INIT_MSG 01000000   // This message is an init message
-#define SMH_FLAG_RESERVED 00100000 // Reserved for future flags
-#define SMH_FLAG_RESERVED 00010000 // Reserved for future flags
-#define SMH_FLAG_RESERVED 00001000 // Reserved for future flags
-#define SMH_FLAG_RESERVED 00000100 // Reserved for future flags
-#define SMH_FLAG_RESERVED 00000010 // Reserved for future flags
-#define SMH_FLAG_RESERVED 00000001 // Reserved for future flags
+#define SMH_FLAG_RESPONSE 0b10000000  // Expecting a response
+#define SMH_IS_INIT_MSG 0b01000000    // This message is an init message
+#define SMH_FLAG_RESERVED0 0b00100000 // Reserved for future flags
+#define SMH_FLAG_RESERVED1 0b00010000 // Reserved for future flags
+#define SMH_FLAG_RESERVED2 0b00001000 // Reserved for future flags
+#define SMH_FLAG_RESERVED3 0b00000100 // Reserved for future flags
+#define SMH_FLAG_RESERVED4 0b00000010 // Reserved for future flags
+#define SMH_FLAG_RESERVED5 0b00000001 // Reserved for future flags
 
 /*
 ------------------------------------------------- Server File Tree Example -------------------------------------------------

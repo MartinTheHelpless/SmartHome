@@ -1,7 +1,10 @@
+#pragma once
+
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 
-#include "Defines.hpp"
+#include "../Utils/Defines.hpp"
 
 namespace fs = std::filesystem;
 
@@ -20,15 +23,21 @@ namespace smh
         {
             if (!fs::exists(srv_top_dir_path_))
             {
-                std::cout << "Server Top Directory \"" << srv_top_dir_path_ << "\" Does not exist." << std::endl;
+                std::cout << "Server Top Directory " << srv_top_dir_path_ << " Does not exist." << std::endl;
                 return false;
             }
+            else
+                std::cout << "Server top directory set to: " << srv_top_dir_path_ << std::endl;
 
             if (!fs::exists(srv_outside_device_path_) || !fs::exists(srv_inside_device_path_))
             {
                 std::cout << "Server directories for device data are invalid" << std::endl;
                 return false;
             }
+            else
+                std::cout << "Device directories set to:\n"
+                          << srv_outside_device_path_ << "\nAnd:\n"
+                          << srv_inside_device_path_;
 
             return true;
         }
@@ -38,10 +47,15 @@ namespace smh
             fs::create_directories(srv_top_dir_path_);
             fs::create_directories(srv_outside_device_path_);
             fs::create_directories(srv_inside_device_path_);
+
+            std::cout << "Server top directory set to: " << srv_top_dir_path_.generic_string() << std::endl;
+            std::cout << "Device directories set to:\n\t"
+                      << srv_outside_device_path_.generic_string() << "\n\t"
+                      << srv_inside_device_path_.generic_string() << std::endl;
         }
 
     public:
-        Smh_File_Helper(bool throw_errors, std::string top_dir_path = SMH_SERVER_DIR_PATH)
+        Smh_File_Helper(bool throw_errors, std::string top_dir_path)
             : srv_top_dir_path_(top_dir_path), throw_errors_(throw_errors)
         {
             if (srv_top_dir_path_ == SMH_SERVER_DIR_PATH)
@@ -61,5 +75,45 @@ namespace smh
                 init_and_create();
         }
         ~Smh_File_Helper() {}
+
+        bool device_file_exists(std::string device_name)
+        {
+            return fs::exists(fs::path(srv_inside_device_path_) / (device_name + ".json")) || fs::exists(fs::path(srv_inside_device_path_) / (device_name + ".json"));
+        }
+
+        bool create_inside_device_file(std::string device_name)
+        {
+            std::ofstream file(srv_inside_device_path_.string() + ("/" + device_name + ".json"));
+            if (!file)
+            {
+                std::cerr << "Failed to create file for " << device_name;
+                return false;
+            }
+            return true;
+        }
+
+        bool create_outside_device_file(std::string device_name)
+        {
+            std::ofstream file(srv_outside_device_path_.string() + ("/" + device_name + ".json"));
+            if (!file)
+            {
+                std::cerr << "Failed to create file for " << device_name;
+                return false;
+            }
+            return true;
+        }
+
+        std::string get_full_path_to_device(const std::string &device_name)
+        {
+            fs::path inside_path = fs::path(srv_inside_device_path_) / (device_name + ".json");
+            fs::path outside_path = fs::path(srv_outside_device_path_) / (device_name + ".json");
+
+            if (fs::is_regular_file(inside_path))
+                return inside_path.string();
+            else if (fs::is_regular_file(outside_path))
+                return outside_path.string();
+
+            return "";
+        }
     };
 }
