@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include "../Utils/Defines.hpp"
+#include "../Objects/Comms/Json_Data.hpp"
 
 namespace fs = std::filesystem;
 
@@ -78,7 +79,7 @@ namespace smh
 
         bool device_file_exists(std::string device_name)
         {
-            return fs::exists(fs::path(srv_inside_device_path_) / (device_name + ".json")) || fs::exists(fs::path(srv_inside_device_path_) / (device_name + ".json"));
+            return fs::exists(fs::path(srv_inside_device_path_) / (device_name + ".json")) || fs::exists(fs::path(srv_outside_device_path_) / (device_name + ".json"));
         }
 
         bool create_inside_device_file(std::string device_name)
@@ -103,7 +104,7 @@ namespace smh
             return true;
         }
 
-        std::string get_full_path_to_device(const std::string &device_name)
+        std::string get_full_path_to_device_file(const std::string &device_name)
         {
             fs::path inside_path = fs::path(srv_inside_device_path_) / (device_name + ".json");
             fs::path outside_path = fs::path(srv_outside_device_path_) / (device_name + ".json");
@@ -114,6 +115,67 @@ namespace smh
                 return outside_path.string();
 
             return "";
+        }
+
+        bool create_and_init_device_file(std::string device_name, Json_Device &data)
+        {
+            if (strstr(device_name.c_str(), "out")) // outside device
+                create_outside_device_file(device_name);
+            else if (strstr(device_name.c_str(), "ins")) // inside device
+                create_inside_device_file(device_name);
+            else
+                std::cout << "Could not deduce ins out out type in: " << device_name << std::endl;
+
+            std::string device_file_path = get_full_path_to_device_file(device_name);
+            if (device_file_path == "")
+                return false;
+
+            data = Json_Device(device_file_path);
+            data.init(device_name);
+
+            data.set_last_contact_now();
+            data.save();
+
+            return true;
+        }
+
+        bool create_and_init_server_file(Json_Server &data)
+        {
+            std::string srv_json_path = fs::path(srv_top_dir_path_ / "server.json");
+
+            std::ofstream file(srv_json_path);
+            if (!file)
+            {
+                std::cerr << "Failed to create server json file\n";
+                return false;
+            }
+            data = Json_Server(srv_json_path);
+            data.init(DEFAULT_SERVER_IP);
+            data.save();
+
+            return true;
+        }
+
+        bool server_json_exists()
+        {
+            std::string srv_json_path = fs::path(srv_top_dir_path_ / "server.json");
+            return fs::exists(srv_json_path);
+        }
+
+        Json_Server get_server_json()
+        {
+            std::string srv_json_path = fs::path(srv_top_dir_path_ / "server.json");
+
+            return Json_Server(srv_json_path);
+        }
+
+        void get_device_json(std::string device_name, Json_Device &device)
+        {
+            std::string device_file_path = get_full_path_to_device_file(device_name);
+            if (device_file_path == "")
+                return;
+
+            device = Json_Device(device_file_path);
         }
     };
 }

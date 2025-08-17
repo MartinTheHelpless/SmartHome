@@ -14,6 +14,7 @@
 #include "../Objects/Comms/Message.hpp"
 #include "Smh_File_Helper.hpp"
 #include "../Objects/Comms/Json_Data.hpp"
+#include "../Objects/Comms/Messenger.hpp"
 
 namespace smh
 {
@@ -23,192 +24,183 @@ namespace smh
         int server_fd = -1;
         int port;
         bool running = false;
+
+        Json_Server server_data;
+
         std::vector<std::future<void>> futures;
-        std::mutex cout_mutex;
+        std::mutex cout_mutex, srv_json_mutex;
 
         Smh_File_Helper file_helper;
 
         void handleClient(int client_sock, const struct sockaddr_in &client_addr)
         {
+            smh::Messenger courier(client_sock);
 
-            std::cout << "Socket Number:" << client_sock << std::endl;
+            Message msg = courier.get_message();
 
-            char buffer[MAX_MESSAGE_SIZE] = {0};
-            int read_bytes = read(client_sock, buffer, sizeof(buffer) - 1);
-            if (read_bytes > 0)
+            if (!msg.is_valid())
             {
-                buffer[read_bytes] = '\0';
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "Client disconnected or read error\n";
+                close(client_sock);
+                return;
+            }
+
+            if (msg.get_header_dest_uid() != SMH_SERVER_UID)
+            {
+                // Check who is recipient by UID
+                // save as dirty data to its file if there is one (next time the device asks if there is anything new for it, it will get the data)
+            }
+            else if (msg.is_init_msg()) // Message sent always after device boot
+            {
+                std::string device_sw_mac = msg.get_payload_str(); // In an init message, the payload contains only the software devoce "MAC"
+                if (!handle_init_message(courier, device_sw_mac, inet_ntoa(client_addr.sin_addr)))
                 {
                     std::lock_guard<std::mutex> lock(cout_mutex);
-                    std::cout << "Received " << read_bytes << " bytes from client\n";
-                }
-                Message msg(buffer, read_bytes);
-
-                if (msg.deserialize_header())
-                {
-
-                    if (msg.get_header_dest_uid() != SMH_SERVER_UID)
-                    {
-                        // Check who is recipient by UID, forward message to recipient
-                        std::lock_guard<std::mutex> lock(cout_mutex);
-                        std::cout << "This message is not for the server" << std::endl;
-                    }
-                    else if (msg.get_header_version() != CURRENT_PROTOCOL_VERSION)
-                    {
-                        std::lock_guard<std::mutex> lock(cout_mutex);
-                        std::cout << "Error: Protocol versions do not match\n";
-                    }
-                    else if (msg.is_init_msg()) // Message is first after boot or after install
-                    {
-                        std::string device_sw_mac = msg.get_payload_str(); // In an init message, the payload contains only the software devoce "MAC"
-                        int client_device_uid = msg.get_header_source_uid();
-                        Json_Data client_device_json;
-
-                        if (!file_helper.device_file_exists(device_sw_mac))
-                        {
-                            if (strstr(device_sw_mac.c_str(), "out")) // outside device
-                                file_helper.create_outside_device_file(device_sw_mac);
-                            else if (strstr(device_sw_mac.c_str(), "ins")) // inside device
-                                file_helper.create_inside_device_file(device_sw_mac);
-                            else
-                            {
-                                std::lock_guard<std::mutex> lock(cout_mutex);
-                                std::cout << "An incorrect SW MAC address detected: " << device_sw_mac << "\n";
-                                close(client_sock);
-                                return;
-                            }
-
-                            std::string device_file_path = file_helper.get_full_path_to_device(device_sw_mac);
-
-                            if (device_file_path == "")
-                            {
-                                std::lock_guard<std::mutex> lock(cout_mutex);
-                                std::cout << "An error has occured while searching for a device json file:\n\t" << device_file_path << "\n";
-                                close(client_sock);
-                                return;
-                            }
-
-                            {
-                                std::lock_guard<std::mutex> lock(cout_mutex);
-                                std::cout << "Json file found:\t\n"
-                                          << device_file_path << std::endl;
-                            }
-
-                            client_device_uid = 20; // TODO: Make a system for UIDs so that they are actually generated and saved
-
-                            client_device_json = Json_Data(device_file_path);
-                            client_device_json.init(client_device_uid, device_sw_mac, inet_ntoa(client_addr.sin_addr));
-
-                            auto now = std::chrono::system_clock::now();
-                            uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-                            client_device_json.set_last_contact(now_ms);
-                            client_device_json.save();
-
-                            // TODO: Add a way to contact all the other devices to tell them that a new device has appeared.
-                            // So they could subsribe to their data
-                        }
-                        else
-                        {
-                            std::string device_file_path = file_helper.get_full_path_to_device(device_sw_mac);
-                            client_device_json = Json_Data(device_file_path);
-                        }
-
-                        auto now = std::chrono::system_clock::now();
-                        uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-                        client_device_json.set_last_contact(now_ms);
-                        client_device_json.save();
-
-                        MessageHeader header;
-                        header.version = 1.0;
-                        header.flags = 0;
-                        header.source_uid = SMH_SERVER_UID;
-                        header.dest_uid = client_device_uid;
-                        header.message_type = MSG_TYPE_POST;
-                        header.payload_size = 0;
-
-                        Message ret_msg = Message(header);
-
-                        uint8_t send_buffer[MAX_MESSAGE_SIZE];
-
-                        int size = ret_msg.serialize(send_buffer);
-
-                        int sent_bytes = send(client_sock, send_buffer, size, 0); // Sending back info the device needs and expects after initial message
-                        std::cout << sent_bytes << " Bytes sent to the client" << std::endl;
-                    }
-
-                    else
-                    {
-                        switch (msg.get_message_type())
-                        {
-                        case MSG_TYPE_GET:
-                        {
-                            // Requests data, expects response
-                            break;
-                        }
-
-                        case MSG_TYPE_POST:
-                        {
-                            // Only info for the server, need to save incomming data to file, maybe forward to subscribers
-                            break;
-                        }
-
-                        case MSG_TYPE_PING:
-                        {
-                            // basically just a keepalive, update last contact time on file
-                            break;
-                        }
-
-                        case MSG_TYPE_SUBSCRIBE:
-                        {
-                            // subscribe to a devices POST type messages
-                            break;
-                        }
-
-                        case MSG_TYPE_UNSUBSCRIBE:
-                        {
-                            // unsubscribe from a devices POST type messages
-                            break;
-                        }
-
-                        case MSG_TYPE_CONTROLL: // Case done
-                        {
-                            // If this message type's destination is the server, something is wrong.
-                            std::lock_guard<std::mutex> lock(cout_mutex);
-                            std::cout << "Error: Controll message received by server - Wrong recipient\n";
-                            break;
-                        }
-
-                        default:
-                        {
-                            std::lock_guard<std::mutex> lock(cout_mutex);
-                            std::cout << "Unknown message type" << std::endl;
-                            break;
-                        }
-                        }
-                    }
-                }
-                else
-                {
-                    std::lock_guard<std::mutex> lock(cout_mutex);
-                    std::cout << "Error: Header deserialization error\n";
+                    std::cout << "Error: Could not handle init message\n";
+                    close(client_sock);
+                    return;
                 }
             }
             else
             {
-                std::lock_guard<std::mutex> lock(cout_mutex);
-                std::cout << "Client disconnected or read error\n";
+                handle_message_by_type(msg);
             }
 
             close(client_sock);
-            std::cout << "A client disconnected\n";
+        }
+
+        bool handle_init_message(const Messenger &courier, const std::string &device_sw_mac, const std::string &last_ip)
+        {
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "Init message received" << std::endl;
+            }
+
+            Json_Device client_device_json;
+
+            if (!file_helper.device_file_exists(device_sw_mac))
+            {
+                if (!file_helper.create_and_init_device_file(device_sw_mac, client_device_json))
+                    return false;
+
+                client_device_json.set_last_ip(last_ip);
+                int client_device_uid;
+                {
+                    std::lock_guard<std::mutex> lock(srv_json_mutex);
+                    client_device_uid = server_data.assign_new_uid(device_sw_mac);
+                }
+                client_device_json.set_uid(client_device_uid);
+                client_device_json.save();
+
+                // OPTIONAL: Add a way to contact all the other devices to tell them that a new device has appeared.
+                // So they could subsribe to their data
+            }
+            else
+            {
+                std::string device_file_path = file_helper.get_full_path_to_device_file(device_sw_mac);
+                client_device_json = Json_Device(device_file_path);
+                client_device_json.set_last_contact_now();
+            }
+
+            MessageHeader header;
+            header.version = CURRENT_PROTOCOL_VERSION;
+            header.flags = SMH_FLAG_NONE;
+            header.source_uid = SMH_SERVER_UID;
+            header.dest_uid = client_device_json.get_uid();
+            header.message_type = MSG_TYPE_POST;
+            header.payload_size = 0;
+
+            Message ret_msg = Message(header);
+
+            courier.send_message(ret_msg);
+
+            return true;
+        }
+
+        bool handle_message_by_type(const Message &msg)
+        {
+            switch (msg.get_message_type())
+            {
+            case MSG_TYPE_GET: // Requested data, expects response
+                break;
+
+            case MSG_TYPE_POST: // Only info for the server, need to save incomming data to file, maybe forward to subscribers
+                break;
+
+            case MSG_TYPE_PING: // basically just a keepalive, update last contact time on file
+            {
+                Json_Device json_data;
+                file_helper.get_device_json(server_data.get_device_by_uid(msg.get_header_source_uid()), json_data);
+                json_data.set_last_contact_now();
+                break;
+            }
+
+            case MSG_TYPE_SUBSCRIBE: // subscribe to a devices POST type messages
+            {
+                std::string device_to_sub_to = msg.get_payload_str();
+
+                Json_Device json_data;
+                file_helper.get_device_json(device_to_sub_to, json_data);
+
+                json_data.add_subscriber(msg.get_header_source_uid());
+                break;
+            }
+
+            case MSG_TYPE_UNSUBSCRIBE: // unsubscribe from a devices POST type messages
+            {
+                std::string device_to_sub_to = msg.get_payload_str();
+
+                Json_Device json_data;
+                file_helper.get_device_json(device_to_sub_to, json_data);
+
+                json_data.remove_subscriber(msg.get_header_source_uid());
+                break;
+            }
+
+            case MSG_TYPE_CONTROLL: // If this message type's destination is the server, something is wrong.
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "Error: Controll message received by server - Wrong recipient\n";
+                break;
+            }
+
+            default:
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "Unknown message type" << std::endl;
+                break;
+            }
+            }
+            return true;
         }
 
     public:
         App(int port_number, std::string srv_top_dir = SMH_SERVER_DIR_PATH)
-            : port(port_number), file_helper(false, srv_top_dir) {}
+            : port(port_number), file_helper(false, srv_top_dir)
+        {
+            std::lock_guard<std::mutex> lock(srv_json_mutex);
+            if (!file_helper.server_json_exists())
+            {
+                if (!file_helper.create_and_init_server_file(server_data))
+                    std::cout << "Error creating server json" << std::endl;
+            }
+            else
+                server_data = file_helper.get_server_json();
+        }
 
         App(std::string srv_top_dir = SMH_SERVER_DIR_PATH, int port_number = DEFAULT_SERVER_PORT)
-            : port(port_number), file_helper(false, srv_top_dir) {}
+            : port(port_number), file_helper(false, srv_top_dir)
+        {
+            std::lock_guard<std::mutex> lock(srv_json_mutex);
+            if (!file_helper.server_json_exists())
+            {
+                if (!file_helper.create_and_init_server_file(server_data))
+                    std::cout << "Error creating server json" << std::endl;
+            }
+            else
+                server_data = file_helper.get_server_json();
+        }
 
         ~App()
         {

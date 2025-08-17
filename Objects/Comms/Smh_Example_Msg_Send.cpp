@@ -54,14 +54,13 @@ int send(uint8_t *buffer, int size)
 
 int main(int argc, char const *argv[])
 {
-
     smh::MessageHeader header;
 
-    header.version = 1.0;
-    header.flags = SMH_IS_INIT_MSG;
-    header.source_uid = 0;
+    header.version = CURRENT_PROTOCOL_VERSION;
+    header.flags = SMH_FLAG_NONE;
+    header.source_uid = 10;
     header.dest_uid = SMH_SERVER_UID;
-    header.message_type = MSG_TYPE_POST;
+    header.message_type = MSG_TYPE_UNSUBSCRIBE;
     header.payload_size = 0;
 
     uint8_t buffer[sizeof(smh::MessageHeader)];
@@ -73,8 +72,6 @@ int main(int argc, char const *argv[])
     header.payload_size = strlen(payload);
 
     smh::Message msg(header, payload);
-
-    int size = sizeof(smh::Message) + strlen(payload) + 10;
 
     uint8_t buffer2[MAX_MESSAGE_SIZE];
 

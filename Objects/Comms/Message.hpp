@@ -19,24 +19,29 @@ namespace smh
 
         uint16_t payload_size_ = 0;
 
+        bool is_valid_ = false;
+
     public:
-        Message(const char buffer[MAX_MESSAGE_SIZE], int read_bytes) : full_buffer_data_size_(read_bytes)
+        Message(const char full_buffer[MAX_MESSAGE_SIZE], int read_bytes) : full_buffer_data_size_(read_bytes)
         {
-            memcpy(full_buffer_, buffer, MAX_MESSAGE_SIZE);
-            deserialize_header();
+            memcpy(full_buffer_, full_buffer, MAX_MESSAGE_SIZE);
+            is_valid_ = deserialize_header();
+
+            if (header_.payload_size > 0)
+                memcpy(payload_buffer_, full_buffer + sizeof(MessageHeader), header_.payload_size);
+            payload_size_ = header_.payload_size;
         }
 
-        Message(MessageHeader header) : header_(header)
+        Message(MessageHeader header) : header_(header), payload_size_(header.payload_size)
         {
-            deserialize_header();
+            is_valid_ = deserialize_header();
         }
 
-        Message(MessageHeader header, const char *buffer)
+        Message(MessageHeader header, const char *payload_buffer)
             : header_(header), payload_size_(header.payload_size)
         {
-            deserialize_header();
-            memcpy(payload_buffer_, buffer, payload_size_);
-            std::cout << payload_buffer_ << std::endl;
+            is_valid_ = deserialize_header();
+            memcpy(payload_buffer_, payload_buffer, payload_size_);
         }
 
         ~Message() = default;
@@ -66,7 +71,7 @@ namespace smh
             std::memcpy(dest_buffer, &header_, sizeof(MessageHeader));
             if (payload_size_ > 0)
                 std::memcpy(dest_buffer + sizeof(MessageHeader), payload_buffer_, payload_size_);
-            std::cout << "Payload size : " << payload_size_ << std::endl;
+            std::cout << "Sent payload size : " << header_.payload_size << std::endl;
             return sizeof(MessageHeader) + payload_size_;
         }
 
@@ -84,6 +89,9 @@ namespace smh
 
             memcpy(payload_buffer_, full_buffer_ + sizeof(MessageHeader), payload_size_);
 
+            if (header_.version != CURRENT_PROTOCOL_VERSION)
+                return false;
+
             return true;
         }
 
@@ -94,15 +102,16 @@ namespace smh
 
         void set_header(const MessageHeader &header) { header_ = header; }
 
-        int get_header_version() { return header_.version; }
-        int get_header_flags() { return header_.flags; }
-        int get_header_source_uid() { return header_.source_uid; }
-        int get_header_dest_uid() { return header_.dest_uid; }
-        Smh_Msg_Type get_message_type() { return header_.message_type; }
-        uint16_t get_header_payload_size() { return header_.payload_size; }
+        int get_header_version() const { return header_.version; }
+        int get_header_flags() const { return header_.flags; }
+        int get_header_source_uid() const { return header_.source_uid; }
+        int get_header_dest_uid() const { return header_.dest_uid; }
+        Smh_Msg_Type get_message_type() const { return header_.message_type; }
+        uint16_t get_header_payload_size() const { return header_.payload_size; }
 
-        bool response_expected() { return (header_.flags & SMH_FLAG_RESPONSE != 0); }
-        bool is_init_msg() { return ((header_.flags & SMH_IS_INIT_MSG) != 0); }
-        std::string get_payload_str() { return std::string(payload_buffer_); }
+        bool response_expected() const { return (header_.flags & SMH_FLAG_RESPONSE != 0); }
+        bool is_init_msg() const { return ((header_.flags & SMH_FLAG_IS_INIT_MSG) != 0); }
+        bool is_valid() const { return is_valid_; }
+        std::string get_payload_str() const { return std::string(payload_buffer_); }
     };
 }
