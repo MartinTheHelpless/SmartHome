@@ -18,4 +18,17 @@ namespace smh
     };
 #pragma pack(pop)
 
+    static MessageHeader create_header(uint8_t source, uint8_t dest, Smh_Msg_Type msg_type, uint8_t flags = SMH_FLAG_NONE,
+                                       uint16_t pld_size = 0, uint8_t protocol_version = CURRENT_PROTOCOL_VERSION)
+    {
+        MessageHeader header;
+        header.source_uid = source;
+        header.dest_uid = dest;
+        header.message_type = msg_type;
+        header.flags = flags;
+        header.payload_size = pld_size;
+        header.version = protocol_version;
+
+        return header;
+    }
 }

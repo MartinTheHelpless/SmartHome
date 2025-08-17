@@ -42,30 +42,42 @@ namespace smh
             {
                 std::lock_guard<std::mutex> lock(cout_mutex);
                 std::cout << "Client disconnected or read error\n";
-                close(client_sock);
-                return;
             }
-
-            if (msg.get_header_dest_uid() != SMH_SERVER_UID)
+            else if (msg.get_header_dest_uid() != SMH_SERVER_UID)
             {
-                // Check who is recipient by UID
-                // save as dirty data to its file if there is one (next time the device asks if there is anything new for it, it will get the data)
+                auto message_type = msg.get_message_type();
+
+                if (message_type == MSG_TYPE_CONTROLL)
+                {
+                    // TODO: Handle immediate send maybe so the controll is not delayed much ??
+                }
+                else if (message_type != MSG_TYPE_POST)
+                {
+                    std::lock_guard<std::mutex> lock(cout_mutex);
+                    std::cout << "Message with a device UID is not POST or CONTROLL type. A Mistake perchance ?\n";
+                }
+                else
+                {
+                    std::string device_name = server_data.get_device_by_uid(msg.get_header_dest_uid());
+
+                    Json_Device device_data;
+
+                    file_helper.get_device_json(device_name, device_data);
+
+                    device_data.add_dirty_data(msg.get_payload_str());
+                }
             }
             else if (msg.is_init_msg()) // Message sent always after device boot
             {
-                std::string device_sw_mac = msg.get_payload_str(); // In an init message, the payload contains only the software devoce "MAC"
-                if (!handle_init_message(courier, device_sw_mac, inet_ntoa(client_addr.sin_addr)))
+                if (!handle_init_message(courier, msg.get_payload_str(), inet_ntoa(client_addr.sin_addr)))
                 {
+                    // In an init message, the payload contains only the software devoce "MAC"
                     std::lock_guard<std::mutex> lock(cout_mutex);
-                    std::cout << "Error: Could not handle init message\n";
-                    close(client_sock);
-                    return;
+                    std::cout << "Errorwhile processing an init message\n";
                 }
             }
             else
-            {
-                handle_message_by_type(msg);
-            }
+                handle_message_by_type(msg, courier);
 
             close(client_sock);
         }
@@ -118,14 +130,83 @@ namespace smh
             return true;
         }
 
-        bool handle_message_by_type(const Message &msg)
+        bool handle_msg_type_get(const Message &msg, Messenger &courier)
+        {
+            std::cout << "HANDLING DATA GET REQUEST\n";
+
+            MessageHeader header;
+            std::string device_name = server_data.get_device_by_uid(msg.get_header_source_uid());
+
+            if (!file_helper.device_file_exists(device_name))
+            {
+                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST, SMH_FLAG_ERROR);
+
+                courier.send_message(Message(header));
+
+                return false;
+            }
+
+            Json_Device device_data;
+            file_helper.get_device_json(device_name, device_data);
+
+            std::string payload;
+            if (device_data.get_dirty_data_size() > 0)
+            {
+                std::vector<std::string> dirty_data = device_data.get_dirty_data();
+                for (auto record : dirty_data)
+                {
+                    payload += record + ";";
+                    std::cout << record << std::endl;
+                }
+
+                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST);
+
+                header.payload_size = payload.length();
+
+                courier.send_message(Message(header, payload.c_str()));
+
+                device_data.clear_dirty_data();
+            }
+            else
+            {
+                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST);
+                courier.send_message(Message(header));
+            }
+            return true;
+        }
+
+        bool handle_msg_type_post(const Message &msg)
+        {
+            std::string device_name = server_data.get_device_by_uid(msg.get_header_source_uid());
+
+            Json_Device device_data;
+            file_helper.get_device_json(device_name, device_data);
+
+            std::vector<int> subs = device_data.get_subscribers();
+            std::string payload = msg.get_payload_str();
+
+            for (int sub_uid : subs)
+            {
+                Json_Device sub_device;
+                file_helper.get_device_json(server_data.get_device_by_uid(sub_uid), sub_device);
+
+                sub_device.add_dirty_data(payload);
+            }
+            return true;
+        }
+
+        bool handle_message_by_type(const Message &msg, Messenger &courier)
         {
             switch (msg.get_message_type())
             {
-            case MSG_TYPE_GET: // Requested data, expects response
+            case MSG_TYPE_GET: // Requests dirty data from server, expects response
+            {
+                handle_msg_type_get(msg, courier);
                 break;
+            }
 
             case MSG_TYPE_POST: // Only info for the server, need to save incomming data to file, maybe forward to subscribers
+                handle_msg_type_post(msg);
                 break;
 
             case MSG_TYPE_PING: // basically just a keepalive, update last contact time on file

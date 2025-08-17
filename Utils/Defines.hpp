@@ -25,7 +25,7 @@ enum Smh_Msg_Type : uint8_t
 static_assert(sizeof(Smh_Msg_Type) == 1, "Smh_Msg_Type must be 1 byte");
 
 #define SMH_FLAG_NONE 0b00000000
-#define SMH_FLAG_RESPONSE 0b10000000    // Expecting a response
+#define SMH_FLAG_ERROR 0b10000000       // Expecting a response
 #define SMH_FLAG_IS_INIT_MSG 0b01000000 // This message is an init message
 #define SMH_FLAG_PING 0b00100000        // Reserved for future flags
 #define SMH_FLAG_RESERVED1 0b00010000   // Reserved for future flags

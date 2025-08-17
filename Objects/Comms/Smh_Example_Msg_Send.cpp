@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 
 #include "Message.hpp"
+#include "Json_Data.hpp"
 
 int send(uint8_t *buffer, int size)
 {
@@ -52,34 +53,40 @@ int send(uint8_t *buffer, int size)
     return sock;
 }
 
+std::vector<std::string> split_string(const std::string &input, char delimiter = ';')
+{
+    std::vector<std::string> tokens;
+    std::stringstream ss(input);
+    std::string token;
+
+    while (std::getline(ss, token, delimiter))
+    {
+        if (!token.empty()) // skip empty tokens
+            tokens.push_back(token);
+    }
+    return tokens;
+}
+
 int main(int argc, char const *argv[])
 {
-    smh::MessageHeader header;
+    std::string payload = "First ever device data post test";
 
-    header.version = CURRENT_PROTOCOL_VERSION;
-    header.flags = SMH_FLAG_NONE;
-    header.source_uid = 10;
-    header.dest_uid = SMH_SERVER_UID;
-    header.message_type = MSG_TYPE_UNSUBSCRIBE;
-    header.payload_size = 0;
+    smh::MessageHeader header = smh::create_header(3, SMH_SERVER_UID, MSG_TYPE_GET, SMH_FLAG_NONE);
 
-    uint8_t buffer[sizeof(smh::MessageHeader)];
+    smh::Message msg(header);
 
-    std::memcpy(buffer, &header, sizeof(smh::MessageHeader));
-
-    const char *payload = "test_device_out";
-
-    header.payload_size = strlen(payload);
-
-    smh::Message msg(header, payload);
-
+    if (!msg.is_valid())
+    {
+        std::cout << "invalid message" << std::endl;
+        return 1;
+    }
     uint8_t buffer2[MAX_MESSAGE_SIZE];
 
     int sizee = msg.serialize(buffer2);
 
     int sock = send(buffer2, sizee);
 
-    char buffera[20] = {0};
+    char buffera[MAX_MESSAGE_SIZE] = {0};
     int read_bytes = read(sock, buffera, sizeof(buffera) - 1);
     if (read_bytes > 0)
     {
@@ -91,6 +98,11 @@ int main(int argc, char const *argv[])
 
     std::cout << "Device New UID: " << msgs.get_header_dest_uid() << std::endl;
     std::cout << "Received from UID: " << msgs.get_header_source_uid() << std::endl;
+
+    std::vector<std::string> data_received = split_string(msgs.get_payload_str(), ';');
+
+    for (auto line : data_received)
+        std::cout << line << std::endl;
 
     return 0;
 }

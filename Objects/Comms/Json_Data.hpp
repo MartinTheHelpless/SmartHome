@@ -35,6 +35,8 @@ private:
 
     std::vector<int> subscribers;
 
+    std::vector<std::string> dirty_data;
+
     uint64_t last_contact;
     DeviceState state;
 
@@ -65,6 +67,13 @@ private:
         }
         oss << "]";
         return oss.str();
+    }
+
+    static std::string trim(const std::string &s)
+    {
+        size_t start = s.find_first_not_of(" \t\r\n");
+        size_t end = s.find_last_not_of(" \t\r\n");
+        return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
     }
 
     static std::vector<std::string> string_to_vec(const std::string &str)
@@ -152,15 +161,11 @@ public:
             if (colon == std::string::npos)
                 continue;
 
-            std::string key = line.substr(0, colon);
-            std::string value = line.substr(colon + 1);
-            key.erase(remove_if(key.begin(), key.end(), isspace), key.end());
-            value.erase(remove_if(value.begin(), value.end(), isspace), value.end());
+            std::string key = trim(line.substr(0, colon));
+            std::string value = trim(line.substr(colon + 1));
 
             if (key == "\"uid\"")
-            {
                 uid = std::stoi(value);
-            }
             else if (key == "\"name\"")
                 name = value.substr(1, value.size() - 3);
             else if (key == "\"type\"")
@@ -175,6 +180,8 @@ public:
                 peripherals = string_to_vec(value);
             else if (key == "\"subscribers\"")
                 subscribers = string_to_vec_int(value);
+            else if (key == "\"dirty_data\"")
+                dirty_data = string_to_vec(value);
             else if (key == "\"last_contact\"")
                 last_contact = std::stoull(value);
             else if (key == "\"state\"")
@@ -200,6 +207,7 @@ public:
         file << "  \"error_log\": " << vec_to_string(error_log) << ",\n";
         file << "  \"peripherals\": " << vec_to_string(peripherals) << ",\n";
         file << "  \"subscribers\": " << vec_to_string(subscribers) << ",\n";
+        file << "  \"dirty_data\": " << vec_to_string(dirty_data) << ",\n";
         file << "  \"last_contact\": " << last_contact << ",\n";
         file << "  \"state\": " << static_cast<int>(state) << "\n";
         file << "}\n";
@@ -210,10 +218,13 @@ public:
 
     // ----- Getters -----
     int get_uid() const { return uid; }
+    int get_dirty_data_size() { return dirty_data.size(); }
+
     std::string get_name() const { return name; }
     std::string get_type() const { return type; }
     std::string get_last_ip() const { return last_ip; }
     std::vector<std::string> get_settings() const { return settings; }
+    std::vector<std::string> get_dirty_data() const { return dirty_data; }
     std::vector<std::string> get_error_log() const { return error_log; }
     std::vector<std::string> get_peripherals() const { return peripherals; }
     std::vector<int> get_subscribers() const { return subscribers; }
@@ -237,6 +248,19 @@ public:
             save();
         }
     }
+
+    void clear_dirty_data()
+    {
+        dirty_data.clear();
+        save();
+    }
+
+    void add_dirty_data(std::string data)
+    {
+        dirty_data.push_back(data);
+        save();
+    }
+
     void remove_subscriber(const int &uid)
     {
         subscribers.erase(
