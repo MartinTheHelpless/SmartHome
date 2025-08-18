@@ -71,7 +71,7 @@ int main(int argc, char const *argv[])
 {
     std::string payload = "This is an example subcriber data";
 
-    smh::MessageHeader header = smh::create_header(5, SMH_SERVER_UID, MSG_TYPE_GET, SMH_FLAG_NONE);
+    smh::MessageHeader header = smh::create_header(5, SMH_SERVER_UID, MSG_GET, SMH_FLAG_NONE);
 
     smh::Message msg(header);
 

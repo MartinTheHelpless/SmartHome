@@ -15,12 +15,14 @@
 
 enum Smh_Msg_Type : uint8_t
 {
-    MSG_TYPE_GET = 0,         // Request data from server
-    MSG_TYPE_POST = 1,        // Send status data to server (sensors, states, ...)
-    MSG_TYPE_PING = 2,        // Keepalive message
-    MSG_TYPE_SUBSCRIBE = 3,   // Subscribe to a device info
-    MSG_TYPE_UNSUBSCRIBE = 4, // Unsubscribe to a device info
-    MSG_TYPE_CONTROLL = 5     // Controll destination device peripherals
+    MSG_GET = 0,               // Request data from server
+    MSG_POST = 1,              // Send status data to server (sensors, states, ...)
+    MSG_PING = 2,              // Keepalive message
+    MSG_SUBSCRIBE = 3,         // Subscribe to a device info
+    MSG_SUBSCRIBE_MULTI = 4,   // Subscribe to multiple devices
+    MSG_UNSUBSCRIBE = 5,       // Unsubscribe to a device info
+    MSG_UNSUBSCRIBE_MULTI = 6, // Unsubscribe from multiple devices
+    MSG_CONTROLL = 7           // Controll destination device peripherals
 };
 static_assert(sizeof(Smh_Msg_Type) == 1, "Smh_Msg_Type must be 1 byte");
 

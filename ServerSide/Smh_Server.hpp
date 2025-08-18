@@ -9,6 +9,7 @@
 #include <future>
 #include <mutex>
 #include <chrono>
+#include <sstream>
 
 #include "../Utils/Defines.hpp"
 #include "../Objects/Comms/Message.hpp"
@@ -47,33 +48,44 @@ namespace smh
             {
                 auto message_type = msg.get_message_type();
 
-                if (message_type == MSG_TYPE_CONTROLL)
+                if (message_type == MSG_CONTROLL)
                 {
                     // TODO: Handle immediate send maybe so the controll is not delayed much ??
                 }
-                else if (message_type != MSG_TYPE_POST)
+                else if (message_type != MSG_POST)
                 {
                     std::lock_guard<std::mutex> lock(cout_mutex);
                     std::cout << "Message with a device UID is not POST or CONTROLL type. A Mistake perchance ?\n";
                 }
                 else
                 {
-                    std::string device_name = server_data.get_device_by_uid(msg.get_header_dest_uid());
+                    std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_dest_uid());
+
+                    if (device_name == std::nullopt)
+                    {
+                        close(client_sock);
+                        return;
+                    }
 
                     Json_Device device_data;
-
-                    file_helper.get_device_json(device_name, device_data);
+                    {
+                        std::lock_guard<std::mutex> lock(srv_json_mutex);
+                        file_helper.get_device_json(device_name.value(), device_data);
+                    }
 
                     device_data.add_dirty_data(msg.get_payload_str());
                 }
             }
             else if (msg.is_init_msg()) // Message sent always after device boot
             {
-                if (!handle_init_message(courier, msg.get_payload_str(), inet_ntoa(client_addr.sin_addr)))
+                char ip_str[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(client_addr.sin_addr), ip_str, INET_ADDRSTRLEN);
+
+                if (!handle_init_message(courier, msg.get_payload_str(), ip_str))
                 {
                     // In an init message, the payload contains only the software devoce "MAC"
                     std::lock_guard<std::mutex> lock(cout_mutex);
-                    std::cout << "Errorwhile processing an init message\n";
+                    std::cout << "Error while processing an init message\n";
                 }
             }
             else
@@ -85,29 +97,31 @@ namespace smh
         bool handle_init_message(const Messenger &courier, const std::string &device_sw_mac, const std::string &last_ip)
         {
             Json_Device client_device_json;
-
-            if (!file_helper.device_file_exists(device_sw_mac))
             {
-                if (!file_helper.create_and_init_device_file(device_sw_mac, client_device_json))
-                    return false;
+                std::lock_guard<std::mutex> lock(srv_json_mutex);
 
-                client_device_json.set_last_ip(last_ip);
-                int client_device_uid;
+                if (!file_helper.device_file_exists(device_sw_mac))
                 {
-                    std::lock_guard<std::mutex> lock(srv_json_mutex);
-                    client_device_uid = server_data.assign_new_uid(device_sw_mac);
-                }
-                client_device_json.set_uid(client_device_uid);
-                client_device_json.save();
+                    if (!file_helper.create_and_init_device_file(device_sw_mac, client_device_json))
+                        return false;
 
-                // OPTIONAL: Add a way to contact all the other devices to tell them that a new device has appeared.
-                // So they could subsribe to their data
-            }
-            else
-            {
-                std::string device_file_path = file_helper.get_full_path_to_device_file(device_sw_mac);
-                client_device_json = Json_Device(device_file_path);
-                client_device_json.set_last_contact_now();
+                    client_device_json.set_last_ip(last_ip);
+                    int client_device_uid;
+
+                    client_device_uid = server_data.assign_new_uid(device_sw_mac);
+
+                    client_device_json.set_uid(client_device_uid);
+                    client_device_json.save();
+
+                    // OPTIONAL: Add a way to contact all the other devices to tell them that a new device has appeared.
+                    // So they could subsribe to their data
+                }
+                else
+                {
+                    std::string device_file_path = file_helper.get_full_path_to_device_file(device_sw_mac);
+                    client_device_json = Json_Device(device_file_path);
+                    client_device_json.set_last_contact_now();
+                }
             }
 
             MessageHeader header;
@@ -115,41 +129,61 @@ namespace smh
             header.flags = SMH_FLAG_NONE;
             header.source_uid = SMH_SERVER_UID;
             header.dest_uid = client_device_json.get_uid();
-            header.message_type = MSG_TYPE_POST;
+            header.message_type = MSG_POST;
             header.payload_size = 0;
 
             Message ret_msg = Message(header);
 
-            courier.send_message(ret_msg);
+            int n = courier.send_message(ret_msg);
+            if (n <= 0)
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cerr << "send_message failed\n";
+                return false;
+            }
 
             return true;
         }
 
-        bool handle_msg_type_get(const Message &msg, Messenger &courier)
+        bool
+        handle_MSG_get(const Message &msg, Messenger &courier)
         {
             MessageHeader header;
-            std::string device_name = server_data.get_device_by_uid(msg.get_header_source_uid());
+            std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_source_uid());
 
-            if (!file_helper.device_file_exists(device_name))
-            {
-                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST, SMH_FLAG_ERROR);
-
-                courier.send_message(Message(header));
-
+            if (device_name == std::nullopt)
                 return false;
+
+            {
+                std::lock_guard<std::mutex> lock(srv_json_mutex);
+                if (!file_helper.device_file_exists(device_name.value()))
+                {
+                    header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_POST, SMH_FLAG_ERROR);
+
+                    courier.send_message(Message(header));
+
+                    return false;
+                }
             }
 
             Json_Device device_data;
-            file_helper.get_device_json(device_name, device_data);
+            {
+                std::lock_guard<std::mutex> lock(srv_json_mutex);
+                file_helper.get_device_json(device_name.value(), device_data);
+            }
 
             std::string payload;
             if (device_data.get_dirty_data_size() > 0)
             {
                 std::vector<std::string> dirty_data = device_data.get_dirty_data();
-                for (auto record : dirty_data)
-                    payload += record + ";";
+                for (size_t i = 0; i < dirty_data.size(); ++i)
+                {
+                    if (i)
+                        payload += ';';
+                    payload += dirty_data[i];
+                }
 
-                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST);
+                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_POST);
 
                 header.payload_size = payload.length();
 
@@ -159,77 +193,142 @@ namespace smh
             }
             else
             {
-                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST);
+                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_POST);
                 courier.send_message(Message(header));
             }
             return true;
         }
 
-        bool handle_msg_type_post(const Message &msg)
+        bool handle_MSG_post(const Message &msg)
         {
-            std::string device_name = server_data.get_device_by_uid(msg.get_header_source_uid());
+            std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_source_uid());
+
+            if (device_name == std::nullopt)
+                return false;
 
             Json_Device device_data;
-            file_helper.get_device_json(device_name, device_data);
+
+            {
+                std::lock_guard<std::mutex> lock(srv_json_mutex);
+                file_helper.get_device_json(device_name.value(), device_data);
+            }
 
             std::vector<int> subs = device_data.get_subscribers();
             std::string payload = msg.get_payload_str();
 
             for (int sub_uid : subs)
             {
+                std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
+
+                if (device_uid == std::nullopt)
+                    continue;
+
                 Json_Device sub_device;
-                file_helper.get_device_json(server_data.get_device_by_uid(sub_uid), sub_device);
+                {
+                    std::lock_guard<std::mutex> lock(srv_json_mutex);
+                    file_helper.get_device_json(device_uid.value(), sub_device);
+                }
 
                 sub_device.add_dirty_data(payload);
             }
             return true;
         }
 
+        void subscribe_to_device(int uid_subscriber, std::string device_to_sub_to)
+        {
+            Json_Device json_data;
+            std::lock_guard<std::mutex> lock(srv_json_mutex);
+            file_helper.get_device_json(device_to_sub_to, json_data);
+
+            json_data.add_subscriber(uid_subscriber);
+        }
+
+        void unsubscribe_from_device(int uid_unsubscriber, std::string device_to_unsub_from)
+        {
+            Json_Device json_data;
+            {
+                std::lock_guard<std::mutex> lock(srv_json_mutex);
+                file_helper.get_device_json(device_to_unsub_from, json_data);
+            }
+
+            json_data.remove_subscriber(uid_unsubscriber);
+        }
+
         bool handle_message_by_type(const Message &msg, Messenger &courier)
         {
             switch (msg.get_message_type())
             {
-            case MSG_TYPE_GET: // Requests dirty data from server, expects response
+            case MSG_GET: // Requests dirty data from server, expects response
             {
-                handle_msg_type_get(msg, courier);
+                handle_MSG_get(msg, courier);
                 break;
             }
 
-            case MSG_TYPE_POST: // Only info for the server, need to save incomming data to file, maybe forward to subscribers
-                handle_msg_type_post(msg);
+            case MSG_POST: // Only info for the server, need to save incomming data to file, maybe forward to subscribers
+                handle_MSG_post(msg);
                 break;
 
-            case MSG_TYPE_PING: // basically just a keepalive, update last contact time on file
+            case MSG_PING: // basically just a keepalive, update last contact time on file
             {
                 Json_Device json_data;
-                file_helper.get_device_json(server_data.get_device_by_uid(msg.get_header_source_uid()), json_data);
-                json_data.set_last_contact_now();
+                std::optional<std::string> device_uid = server_data.try_get_device_by_uid(msg.get_header_source_uid());
+                if (device_uid != std::nullopt)
+                {
+                    std::lock_guard<std::mutex> lock(srv_json_mutex);
+                    file_helper.get_device_json(device_uid.value(), json_data);
+                    json_data.set_last_contact_now();
+                }
                 break;
             }
 
-            case MSG_TYPE_SUBSCRIBE: // subscribe to a devices POST type messages
+            case MSG_SUBSCRIBE: // subscribe to a devices POST type messages
+                subscribe_to_device(msg.get_header_source_uid(), msg.get_payload_str());
+                break;
+
+            case MSG_SUBSCRIBE_MULTI: // subscribe to a devices POST type messages
             {
-                std::string device_to_sub_to = msg.get_payload_str();
+                std::string devices_str = msg.get_payload_str();
 
-                Json_Device json_data;
-                file_helper.get_device_json(device_to_sub_to, json_data);
+                std::string device;
+                std::vector<std::string> devices;
+                std::stringstream ss(devices_str);
 
-                json_data.add_subscriber(msg.get_header_source_uid());
+                while (std::getline(ss, device, ';'))
+                    if (!device.empty())
+                        devices.push_back(device);
+
+                int subscriber_uid = msg.get_header_source_uid();
+
+                for (auto device : devices)
+                    subscribe_to_device(subscriber_uid, device);
+
                 break;
             }
 
-            case MSG_TYPE_UNSUBSCRIBE: // unsubscribe from a devices POST type messages
+            case MSG_UNSUBSCRIBE: // unsubscribe from a devices POST type messages
+                unsubscribe_from_device(msg.get_header_source_uid(), msg.get_payload_str());
+                break;
+
+            case MSG_UNSUBSCRIBE_MULTI: // unsubscribe from a devices POST type messages
             {
-                std::string device_to_sub_to = msg.get_payload_str();
+                std::string devices_str = msg.get_payload_str();
 
-                Json_Device json_data;
-                file_helper.get_device_json(device_to_sub_to, json_data);
+                std::string device;
+                std::vector<std::string> devices;
+                std::stringstream ss(devices_str);
 
-                json_data.remove_subscriber(msg.get_header_source_uid());
+                while (std::getline(ss, device, ';'))
+                    if (!device.empty())
+                        devices.push_back(device);
+
+                int subscriber_uid = msg.get_header_source_uid();
+
+                for (auto device : devices)
+                    unsubscribe_from_device(subscriber_uid, device);
                 break;
             }
 
-            case MSG_TYPE_CONTROLL: // If this message type's destination is the server, something is wrong.
+            case MSG_CONTROLL: // If this message type's destination is the server, something is wrong.
             {
                 std::lock_guard<std::mutex> lock(cout_mutex);
                 std::cout << "Error: Controll message received by server - Wrong recipient\n";
@@ -277,7 +376,10 @@ namespace smh
         {
             running = false;
             if (server_fd != -1)
+            {
+                shutdown(server_fd, SHUT_RDWR);
                 close(server_fd);
+            }
 
             // Wait for all futures
             for (auto it = futures.begin(); it != futures.end();)
@@ -294,7 +396,7 @@ namespace smh
             int opt = 1;
             socklen_t addrlen = sizeof(address);
 
-            if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+            if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
             {
                 perror("Socket failed");
                 return;
@@ -337,10 +439,11 @@ namespace smh
                     continue;
                 }
 
+                char ip_str[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(address.sin_addr), ip_str, INET_ADDRSTRLEN);
                 {
                     std::lock_guard<std::mutex> lock(cout_mutex);
-                    std::cout << "Client connected: "
-                              << inet_ntoa(address.sin_addr) << ":" << ntohs(address.sin_port) << "\n";
+                    std::cout << "Client connected: " << ip_str << ":" << ntohs(address.sin_port) << "\n";
                 }
 
                 auto fut = std::async(std::launch::async,

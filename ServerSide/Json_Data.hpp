@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <map>
+#include <optional>
 
 enum class DeviceState : uint8_t
 {
@@ -459,7 +460,13 @@ public:
     std::map<int, std::string> get_devices() const { return devices; }
     std::vector<std::string> get_error_log() const { return error_log; }
     uint64_t get_uptime_start() const { return uptime_start; }
-    std::string get_device_by_uid(int uid) { return devices[uid]; }
+    std::optional<std::string> try_get_device_by_uid(int uid)
+    {
+        auto it = devices.find(uid);
+        if (it != devices.end())
+            return it->second;
+        return std::nullopt;
+    }
 
     // ----- Setters -----
     void set_ip_address(const std::string &ip) { ip_address = ip; }
