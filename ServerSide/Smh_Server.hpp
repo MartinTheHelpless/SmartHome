@@ -13,12 +13,12 @@
 #include "../Utils/Defines.hpp"
 #include "../Objects/Comms/Message.hpp"
 #include "Smh_File_Helper.hpp"
-#include "../Objects/Comms/Json_Data.hpp"
+#include "Json_Data.hpp"
 #include "../Objects/Comms/Messenger.hpp"
 
 namespace smh
 {
-    class App
+    class Server
     {
     private:
         int server_fd = -1;
@@ -84,11 +84,6 @@ namespace smh
 
         bool handle_init_message(const Messenger &courier, const std::string &device_sw_mac, const std::string &last_ip)
         {
-            {
-                std::lock_guard<std::mutex> lock(cout_mutex);
-                std::cout << "Init message received" << std::endl;
-            }
-
             Json_Device client_device_json;
 
             if (!file_helper.device_file_exists(device_sw_mac))
@@ -132,8 +127,6 @@ namespace smh
 
         bool handle_msg_type_get(const Message &msg, Messenger &courier)
         {
-            std::cout << "HANDLING DATA GET REQUEST\n";
-
             MessageHeader header;
             std::string device_name = server_data.get_device_by_uid(msg.get_header_source_uid());
 
@@ -154,10 +147,7 @@ namespace smh
             {
                 std::vector<std::string> dirty_data = device_data.get_dirty_data();
                 for (auto record : dirty_data)
-                {
                     payload += record + ";";
-                    std::cout << record << std::endl;
-                }
 
                 header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_TYPE_POST);
 
@@ -257,7 +247,7 @@ namespace smh
         }
 
     public:
-        App(int port_number, std::string srv_top_dir = SMH_SERVER_DIR_PATH)
+        Server(int port_number, std::string srv_top_dir = SMH_SERVER_DIR_PATH)
             : port(port_number), file_helper(false, srv_top_dir)
         {
             std::lock_guard<std::mutex> lock(srv_json_mutex);
@@ -270,7 +260,7 @@ namespace smh
                 server_data = file_helper.get_server_json();
         }
 
-        App(std::string srv_top_dir = SMH_SERVER_DIR_PATH, int port_number = DEFAULT_SERVER_PORT)
+        Server(std::string srv_top_dir = SMH_SERVER_DIR_PATH, int port_number = DEFAULT_SERVER_PORT)
             : port(port_number), file_helper(false, srv_top_dir)
         {
             std::lock_guard<std::mutex> lock(srv_json_mutex);
@@ -283,7 +273,7 @@ namespace smh
                 server_data = file_helper.get_server_json();
         }
 
-        ~App()
+        ~Server()
         {
             running = false;
             if (server_fd != -1)
@@ -333,8 +323,10 @@ namespace smh
             }
 
             running = true;
-
-            std::cout << "Server listening on port " << port << "\n";
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << "Server listening on port " << port << "\n";
+            }
 
             while (running)
             {
@@ -364,8 +356,10 @@ namespace smh
                     }
                     else
                         ++it;
-
-                std::cout << "Clients connected: " << futures.size() << "\n";
+                {
+                    std::lock_guard<std::mutex> lock(cout_mutex);
+                    std::cout << "Clients connected: " << futures.size() << "\n";
+                }
             }
         }
     };

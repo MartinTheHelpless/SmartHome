@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 
 #include "Message.hpp"
-#include "Json_Data.hpp"
+#include "../../ServerSide/Json_Data.hpp"
 
 int send(uint8_t *buffer, int size)
 {
@@ -69,9 +69,9 @@ std::vector<std::string> split_string(const std::string &input, char delimiter =
 
 int main(int argc, char const *argv[])
 {
-    std::string payload = "First ever device data post test";
+    std::string payload = "This is an example subcriber data";
 
-    smh::MessageHeader header = smh::create_header(3, SMH_SERVER_UID, MSG_TYPE_GET, SMH_FLAG_NONE);
+    smh::MessageHeader header = smh::create_header(5, SMH_SERVER_UID, MSG_TYPE_GET, SMH_FLAG_NONE);
 
     smh::Message msg(header);
 
@@ -83,7 +83,6 @@ int main(int argc, char const *argv[])
     uint8_t buffer2[MAX_MESSAGE_SIZE];
 
     int sizee = msg.serialize(buffer2);
-
     int sock = send(buffer2, sizee);
 
     char buffera[MAX_MESSAGE_SIZE] = {0};

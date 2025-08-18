@@ -1,4 +1,4 @@
-#include "Smh_Server_App.hpp"
+#include "Smh_Server.hpp"
 #include "../Utils/Defines.hpp"
 
 int main(int argc, char const *argv[])
@@ -9,18 +9,18 @@ int main(int argc, char const *argv[])
 
     if (argc == 1)
     {
-        smh::App app;
-        app.run();
+        smh::Server srv;
+        srv.run();
     }
     else if (argc == 2)
     {
-        smh::App app(argv[1]);
-        app.run();
+        smh::Server srv(argv[1]);
+        srv.run();
     }
     else if (argc == 3)
     {
-        smh::App app(std::stoi(argv[2]), argv[1]);
-        app.run();
+        smh::Server srv(std::stoi(argv[2]), argv[1]);
+        srv.run();
     }
 
     return 0;
