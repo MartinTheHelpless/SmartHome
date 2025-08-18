@@ -71,7 +71,7 @@ namespace smh
             std::memcpy(dest_buffer, &header_, sizeof(MessageHeader));
             if (payload_size_ > 0)
                 std::memcpy(dest_buffer + sizeof(MessageHeader), payload_buffer_, payload_size_);
-            std::cout << "Sent payload size : " << header_.payload_size << std::endl;
+            // std::cout << "Sent payload size : " << header_.payload_size << std::endl;
             return sizeof(MessageHeader) + payload_size_;
         }
 

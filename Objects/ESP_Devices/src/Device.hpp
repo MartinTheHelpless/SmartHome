@@ -13,11 +13,11 @@ namespace smh
     {
     protected:
         std::string ip_ = "";
-        std::string device_name_ = "test_device_out";
+        std::string device_name_ = "";
 
         uint8_t device_uid_ = 0;
 
-        std::string server_ip_ = DEFAULT_SERVER_IP;
+        std::string server_ip_ = "192.168.1.73";
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
         std::string ssid = "My Precious Wifi";
@@ -26,10 +26,10 @@ namespace smh
         WiFiClient client;
 
     public:
-        Smh_Device() {}
+        Smh_Device(std::string device_name) : device_name_(device_name) {}
         ~Smh_Device() {}
 
-        bool run()
+        bool Init()
         {
             connect_to_wifi();
 
@@ -42,7 +42,7 @@ namespace smh
 
             device_uid_ = init_server_msg.get_header_dest_uid();
 
-            Serial.printf("This Devices's assigned UID: %d", device_uid_);
+            Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
 
             return true;
         }
@@ -85,7 +85,7 @@ namespace smh
             if (!client.connected())
             {
                 Serial.println("Connecting to server...");
-                if (client.connect(server_ip_.c_str(), server_port_))
+                if (client.connect("192.168.1.73", server_port_))
                 {
                     Serial.println("Connected to server!");
                     return true;
@@ -125,13 +125,14 @@ namespace smh
         bool send_init_message()
         {
             if (!connect_to_server())
-                return;
+                return false;
 
             MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG);
 
             Message msg(header, device_name_.c_str());
 
             send_message_to_server(msg);
+            return true;
         }
     };
 }
