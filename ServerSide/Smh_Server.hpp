@@ -124,14 +124,7 @@ namespace smh
                 }
             }
 
-            MessageHeader header;
-            header.version = CURRENT_PROTOCOL_VERSION;
-            header.flags = SMH_FLAG_NONE;
-            header.source_uid = SMH_SERVER_UID;
-            header.dest_uid = client_device_json.get_uid();
-            header.message_type = MSG_POST;
-            header.payload_size = 0;
-
+            MessageHeader header = create_header(SMH_SERVER_UID, client_device_json.get_uid(), MSG_POST);
             Message ret_msg = Message(header);
 
             int n = courier.send_message(ret_msg);

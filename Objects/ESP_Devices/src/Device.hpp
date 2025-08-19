@@ -1,7 +1,9 @@
 #include <string>
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
 
-#include <Arduino.h>
+#include <iterator>
+#include <memory>
 
 #include "../../../Utils/Defines.hpp"
 #include "../../Comms/Message.hpp"
@@ -20,8 +22,8 @@ namespace smh
         std::string server_ip_ = "10.9.170.225";
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
-        std::string ssid = "tmp_netw";
-        std::string password = "password";
+        std::string ssid = "RETIA-Guest";
+        std::string password = "53002341";
 
         WiFiClient client;
 
@@ -33,14 +35,20 @@ namespace smh
         {
             connect_to_wifi();
 
-            send_init_message();
-
-            Message init_server_msg = receive_msg(); // This will be a response the the init message containing this device's UID
-
-            if (!init_server_msg.is_valid())
+            if (!connect_to_server())
                 return false;
 
-            device_uid_ = init_server_msg.get_header_dest_uid();
+            send_init_message();
+
+            std::shared_ptr<Message> init_server_msg = receive_msg(); // This will be a response the the init message containing this device's UID
+
+            if (!init_server_msg->is_valid())
+            {
+                Serial.println("Received init message from server is invalid");
+                return false;
+            }
+
+            device_uid_ = init_server_msg->get_header_dest_uid();
 
             Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
 
@@ -66,34 +74,32 @@ namespace smh
             Serial.println(WiFi.localIP());
         }
 
-        int readSocket(WiFiClient &client, uint8_t *buffer, int to_read = MAX_MESSAGE_SIZE)
+        std::vector<uint8_t> readSocket(WiFiClient &client, int to_read = MAX_MESSAGE_SIZE)
         {
             if (!client.connected())
-                return 0;
+                return std::vector<uint8_t>();
 
             int bytesRead = 0;
+            std::vector<uint8_t> buffer;
 
             while (client.available() && bytesRead < to_read)
             {
                 int c = client.read();
                 if (c < 0)
                     break;
-                buffer[bytesRead++] = (uint8_t)c;
+                buffer.push_back((uint8_t)c);
             }
+            Serial.printf("buffer size = %d\n", buffer.size());
 
-            return bytesRead;
+            return buffer;
         }
 
         bool connect_to_server()
         {
             if (!client.connected())
             {
-                Serial.println("Connecting to server...");
-                if (client.connect(server_ip_.c_str(), server_port_))
-                {
+                if (client.connect("10.9.170.225", 9000))
                     Serial.println("Connected to server!");
-                    return true;
-                }
                 else
                 {
                     Serial.println("Failed to connect to server");
@@ -103,41 +109,32 @@ namespace smh
             return true;
         }
 
-        void send_message_to_server(const Message &msg)
+        void send_message_to_server(std::shared_ptr<Message> msg)
         {
-            if (!client.connected() && !connect_to_server())
-                return;
+            auto buffer = msg->serialize();
 
-            uint8_t buffer[MAX_MESSAGE_SIZE] = {0};
-
-            size_t size = msg.serialize(buffer);
-
-            size_t sent = client.write(buffer, size);
+            size_t sent = client.write(buffer.data(), buffer.size());
 
             Serial.printf("Sent %d bytes\n", sent);
         }
 
-        Message receive_msg()
+        std::shared_ptr<Message> receive_msg()
         {
-            uint8_t buffer[MAX_MESSAGE_SIZE] = {0};
+            auto buffer = readSocket(client);
 
-            int bytes_read = readSocket(client, buffer);
-
-            Message msg((char *)buffer, bytes_read);
+            std::shared_ptr<Message> msg = std::make_shared<Message>(buffer);
 
             return msg;
         }
 
         bool send_init_message()
         {
-            if (!connect_to_server())
-                return false;
-
             MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG, device_name_.length());
 
-            Message msg(header, device_name_.c_str());
+            std::shared_ptr<Message> msg = std::make_shared<Message>(header, device_name_);
 
             send_message_to_server(msg);
+
             return true;
         }
     };

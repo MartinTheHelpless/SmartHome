@@ -37,11 +37,10 @@ namespace smh
 
         int send_message(const Message &msg) const
         {
-            uint8_t send_buffer[MAX_MESSAGE_SIZE];
 
-            int size = msg.serialize(send_buffer);
+            auto send_buffer = msg.serialize();
 
-            int sent_bytes = send(socket_fd_, send_buffer, size, 0); // Sending back info the device needs and expects after initial message
+            int sent_bytes = send(socket_fd_, send_buffer.data(), send_buffer.size(), 0); // Sending back info the device needs and expects after initial message
 
             return sent_bytes;
         }

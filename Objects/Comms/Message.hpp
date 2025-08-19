@@ -14,22 +14,21 @@ namespace smh
 
         int full_buffer_size_ = 0;
 
-        uint8_t full_buffer_[MAX_MESSAGE_SIZE] = {0};
-        char payload_buffer_[MAX_MESSAGE_SIZE] = {0};
+        std::string full_buffer_;
 
-        uint16_t payload_size_ = 0;
+        uint16_t payload_size_;
+        std::string payload_buffer_;
 
         bool is_valid_ = false;
 
     public:
-        Message(const char full_buffer[MAX_MESSAGE_SIZE], int read_bytes) : full_buffer_size_(read_bytes)
+        Message(const char full_buffer[MAX_MESSAGE_SIZE], int read_bytes)
+            : full_buffer_size_(read_bytes), full_buffer_(full_buffer), payload_size_(header_.payload_size)
         {
-            memcpy(full_buffer_, full_buffer, MAX_MESSAGE_SIZE);
             is_valid_ = deserialize_header();
 
             if (header_.payload_size > 0)
-                memcpy(payload_buffer_, full_buffer + sizeof(MessageHeader), header_.payload_size);
-            payload_size_ = header_.payload_size;
+                std::copy(full_buffer_.begin() + sizeof(MessageHeader), full_buffer_.end(), payload_buffer_.data());
         }
 
         Message(MessageHeader header) : header_(header), payload_size_(header.payload_size)
@@ -37,47 +36,50 @@ namespace smh
             is_valid_ = check_header_valid();
         }
 
-        Message(MessageHeader header, const char *payload_buffer)
-            : header_(header), payload_size_(header.payload_size)
+        Message(MessageHeader header, std::string payload_buffer)
+            : header_(header), payload_size_(header.payload_size), payload_buffer_(payload_buffer)
         {
             is_valid_ = check_header_valid();
-            memcpy(payload_buffer_, payload_buffer, payload_size_);
+        }
+
+        Message(std::vector<uint8_t> buffer)
+        {
+            if (buffer.size() < 7)
+            {
+                is_valid_ = false;
+                return;
+            }
+
+            uint8_t *ptr = reinterpret_cast<uint8_t *>(&header_);
+            std::copy(buffer.begin(), buffer.begin() + sizeof(MessageHeader), ptr);
+
+            if (header_.payload_size > 0)
+                std::copy(buffer.begin() + sizeof(MessageHeader), buffer.end(), payload_buffer_.data());
+
+            is_valid_ = check_header_valid();
         }
 
         ~Message() = default;
 
-        bool deserialize(const uint8_t *src_buffer, size_t size)
+        std::vector<uint8_t> serialize()
         {
-            if (size < sizeof(MessageHeader))
-                return false;
+            std::vector<uint8_t> buffer(sizeof(MessageHeader) + payload_size_, 0);
 
-            std::memcpy(full_buffer_, src_buffer, size);
+            uint8_t *ptr = reinterpret_cast<uint8_t *>(&header_);
 
-            std::memcpy(&header_, src_buffer, sizeof(MessageHeader));
-            payload_size_ = header_.payload_size;
+            std::copy(ptr, ptr + sizeof(MessageHeader), buffer.data());
 
             if (payload_size_ > 0)
-            {
-                if (payload_size_ + sizeof(MessageHeader) > size || payload_size_ >= MAX_MESSAGE_SIZE)
-                    return false;
-                std::memcpy(payload_buffer_, src_buffer + sizeof(MessageHeader), payload_size_);
-            }
+                std::copy(payload_buffer_.begin(), payload_buffer_.end(), buffer.data() + sizeof(MessageHeader));
 
-            return true;
-        }
-
-        size_t serialize(uint8_t *dest_buffer) const
-        {
-            std::memcpy(dest_buffer, &header_, sizeof(MessageHeader));
-            if (payload_size_ > 0)
-                std::memcpy(dest_buffer + sizeof(MessageHeader), payload_buffer_, payload_size_);
-            // std::cout << "Sent payload size : " << header_.payload_size << std::endl;
-            return sizeof(MessageHeader) + payload_size_;
+            return buffer;
         }
 
         bool deserialize_header()
         {
-            std::memcpy(&header_, full_buffer_, sizeof(MessageHeader));
+            uint8_t *ptr = reinterpret_cast<uint8_t *>(&header_);
+
+            std::copy(full_buffer_.begin(), full_buffer_.begin() + sizeof(MessageHeader), ptr); // (&header_, full_buffer_, sizeof(MessageHeader));
 
             if (header_.payload_size >= MAX_MESSAGE_SIZE)
                 return false;
@@ -85,17 +87,22 @@ namespace smh
             payload_size_ = header_.payload_size;
             full_buffer_size_ = sizeof(MessageHeader) + header_.payload_size;
 
-            memcpy(payload_buffer_, full_buffer_ + sizeof(MessageHeader), payload_size_);
+            std::copy(full_buffer_.begin() + sizeof(MessageHeader), full_buffer_.end(), payload_buffer_.data());
 
             if (header_.version != CURRENT_PROTOCOL_VERSION)
                 return false;
-
             return true;
         }
 
-        void serialize_header(char *dest_buffer[9])
+        std::vector<uint8_t> serialize_header()
         {
-            std::memcpy(dest_buffer, &header_, sizeof(MessageHeader));
+            std::vector<uint8_t> buffer(sizeof(MessageHeader), 0);
+
+            uint8_t *ptr = reinterpret_cast<uint8_t *>(&header_);
+
+            std::copy(ptr, ptr + sizeof(MessageHeader), buffer.begin());
+
+            return buffer;
         }
 
         bool check_header_valid()
