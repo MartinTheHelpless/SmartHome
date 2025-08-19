@@ -26,18 +26,19 @@ namespace smh
 
         Message get_message()
         {
-            char buffer[MAX_MESSAGE_SIZE] = {0};
-            int read_bytes = read_socket(buffer);
+            std::vector<uint8_t> buffer(MAX_MESSAGE_SIZE);
+            int read_bytes = read_socket(reinterpret_cast<char *>(buffer.data()), buffer.size());
             std::cout << "Read amount of bytes: " << read_bytes << std::endl;
-            if (read_bytes > 0)
-                return Message(buffer, read_bytes);
 
-            return Message(buffer, 0);
+            if (read_bytes <= 0)
+                return Message(std::vector<uint8_t>());
+
+            buffer.resize(read_bytes);
+            return Message(buffer);
         }
 
         int send_message(const Message &msg) const
         {
-
             auto send_buffer = msg.serialize();
 
             int sent_bytes = send(socket_fd_, send_buffer.data(), send_buffer.size(), 0); // Sending back info the device needs and expects after initial message

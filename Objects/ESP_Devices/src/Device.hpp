@@ -10,7 +10,6 @@
 
 namespace smh
 {
-
     class Smh_Device
     {
     protected:
@@ -19,11 +18,11 @@ namespace smh
 
         uint8_t device_uid_ = 0;
 
-        std::string server_ip_ = "10.9.170.225";
+        std::string server_ip_ = "10.42.0.1";
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
-        std::string ssid = "RETIA-Guest";
-        std::string password = "53002341";
+        std::string ssid = "tmp_netw";
+        std::string password = "password";
 
         WiFiClient client;
 
@@ -34,7 +33,6 @@ namespace smh
         bool Init()
         {
             connect_to_wifi();
-
             if (!connect_to_server())
                 return false;
 
@@ -50,9 +48,9 @@ namespace smh
 
             device_uid_ = init_server_msg->get_header_dest_uid();
 
-            Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
-
             client.stop();
+
+            Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
 
             return true;
         }
@@ -98,7 +96,7 @@ namespace smh
         {
             if (!client.connected())
             {
-                if (client.connect("10.9.170.225", 9000))
+                if (client.connect(server_ip_.c_str(), server_port_))
                     Serial.println("Connected to server!");
                 else
                 {
@@ -113,6 +111,11 @@ namespace smh
         {
             auto buffer = msg->serialize();
 
+            std::shared_ptr<Message> tmp = std::make_shared<Message>(buffer);
+
+            Serial.println(tmp->get_payload_str().c_str());
+            Serial.println(msg->get_payload_str().c_str());
+
             size_t sent = client.write(buffer.data(), buffer.size());
 
             Serial.printf("Sent %d bytes\n", sent);
@@ -120,18 +123,51 @@ namespace smh
 
         std::shared_ptr<Message> receive_msg()
         {
-            auto buffer = readSocket(client);
+            const int HEADER_SIZE = sizeof(MessageHeader);
 
-            std::shared_ptr<Message> msg = std::make_shared<Message>(buffer);
+            unsigned long start = millis();
+            while (client.available() < HEADER_SIZE)
+            {
+                if (millis() - start > 2000)
+                    return std::make_shared<Message>(std::vector<uint8_t>());
+                delay(5);
+            }
 
-            return msg;
+            std::vector<uint8_t> buffer(HEADER_SIZE);
+            client.read(buffer.data(), HEADER_SIZE);
+
+            MessageHeader header;
+            memcpy(&header, buffer.data(), HEADER_SIZE);
+
+            std::vector<uint8_t> payload(header.payload_size);
+            int bytesRead = 0;
+            start = millis();
+            while (bytesRead < header.payload_size)
+            {
+                int avail = client.available();
+                if (avail > 0)
+                {
+                    int toRead = std::min(avail, header.payload_size - bytesRead);
+                    bytesRead += client.read(payload.data() + bytesRead, toRead);
+                }
+                if (millis() - start > 2000)
+                    break;
+                delay(5);
+            }
+
+            buffer.insert(buffer.end(), payload.begin(), payload.begin() + bytesRead);
+
+            return std::make_shared<Message>(buffer);
         }
 
         bool send_init_message()
         {
             MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG, device_name_.length());
 
-            std::shared_ptr<Message> msg = std::make_shared<Message>(header, device_name_);
+            std::vector<uint8_t> payload(device_name_.length(), 0);
+            std::copy(device_name_.begin(), device_name_.end(), payload.begin());
+
+            std::shared_ptr<Message> msg = std::make_shared<Message>(header, payload);
 
             send_message_to_server(msg);
 

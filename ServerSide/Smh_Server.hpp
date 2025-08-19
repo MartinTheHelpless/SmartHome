@@ -169,21 +169,24 @@ namespace smh
             if (device_data.get_dirty_data_size() > 0)
             {
                 std::vector<std::string> dirty_data = device_data.get_dirty_data();
+                std::vector<uint8_t> payload_bytes;
+
                 for (size_t i = 0; i < dirty_data.size(); ++i)
                 {
                     if (i)
-                        payload += ';';
-                    payload += dirty_data[i];
+                        payload_bytes.push_back(';'); // separator
+                    const std::string &s = dirty_data[i];
+                    payload_bytes.insert(payload_bytes.end(), s.begin(), s.end());
                 }
 
-                header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_POST);
+                MessageHeader header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_POST);
+                header.payload_size = static_cast<uint16_t>(payload_bytes.size());
 
-                header.payload_size = payload.length();
-
-                courier.send_message(Message(header, payload.c_str()));
+                courier.send_message(Message(header, payload_bytes));
 
                 device_data.clear_dirty_data();
             }
+
             else
             {
                 header = create_header(SMH_SERVER_UID, msg.get_header_source_uid(), MSG_POST);
