@@ -59,21 +59,11 @@ namespace smh
                 }
                 else
                 {
-                    std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_dest_uid());
-
-                    if (device_name == std::nullopt)
+                    if (!handle_msg_forward(msg))
                     {
-                        close(client_sock);
-                        return;
+                        std::lock_guard<std::mutex> lock(cout_mutex);
+                        std::cout << "Could not forward message. Recipient not found\n";
                     }
-
-                    Json_Device device_data;
-                    {
-                        std::lock_guard<std::mutex> lock(srv_json_mutex);
-                        file_helper.get_device_json(device_name.value(), device_data);
-                    }
-
-                    device_data.add_dirty_data(msg.get_payload_str());
                 }
             }
             else if (msg.is_init_msg()) // Message sent always after device boot
@@ -81,17 +71,34 @@ namespace smh
                 char ip_str[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &(client_addr.sin_addr), ip_str, INET_ADDRSTRLEN);
 
-                if (!handle_init_message(courier, msg.get_payload_str(), ip_str))
+                if (!handle_init_message(courier, msg.get_payload_str(), ip_str)) // In an init message, the payload contains only the software device "MAC"
                 {
-                    // In an init message, the payload contains only the software devoce "MAC"
                     std::lock_guard<std::mutex> lock(cout_mutex);
                     std::cout << "Error while processing an init message\n";
                 }
             }
-            else
+            else // Normal message adressed to server
                 handle_message_by_type(msg, courier);
 
             close(client_sock);
+        }
+
+        bool handle_msg_forward(const Message &msg)
+        {
+            std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_dest_uid());
+
+            if (device_name == std::nullopt)
+                return false;
+
+            Json_Device device_data;
+            {
+                std::lock_guard<std::mutex> lock(srv_json_mutex);
+                file_helper.get_device_json(device_name.value(), device_data);
+            }
+
+            device_data.add_dirty_data(msg.get_payload_str());
+
+            return true;
         }
 
         bool handle_init_message(const Messenger &courier, const std::string &device_sw_mac, const std::string &last_ip)

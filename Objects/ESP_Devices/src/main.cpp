@@ -6,54 +6,21 @@ void setup()
 {
     if (!device.Init())
         ;
+
+    // TODO: Add a timer on an arbitrary amount of seconds to perform and interrupt to query
+    // the server on any new data for the device. This will be a Smh_Device function that creates the
+    // interrupt timer. Something like create_query_timer(); that will return a timer or set one up.
+
+    // TODO: Add a system that will be using the temperatures an dsensors, like a map or vector of pairs
+    // in the json server file. Concept: <sensor/function>:<value>. For example:
+    // PERIPHERAL:temperature:23.1;PERIPHERAL:pressure:10;PERIPHERAL:moisture:25
+    // Firstly info type (other data can have other identifiers, tokenize first by ';', than by ':');
+    // and save this to the json file as dirty data and into the peripherals maybe ?
+
+    // TODO: Add a litening socket for incomming connection from server in case there is a CONTROLL command
+    // For this device to execute soem function.
 }
 
 void loop()
 {
 }
-/*
-
-#include <ESP8266WiFi.h>
-
-const char *ssid = "RETIA-Guest";
-const char *password = "53002341";
-
-const char *server_ip = "10.9.170.225"; // your PC IP in hotspot network
-const uint16_t server_port = 9000;
-
-WiFiClient client;
-
-void setup()
-{
-    Serial.begin(115200);
-    WiFi.begin(ssid, password);
-
-    Serial.print("Connecting to Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nWi-Fi connected!");
-    Serial.print("ESP IP: ");
-    Serial.println(WiFi.localIP());
-
-    Serial.println("Connecting to server...");
-    if (client.connect(server_ip, server_port))
-    {
-        Serial.println("Connected to server!");
-        client.print("Hello from ESP!\n"); // send data
-        client.flush();
-        Serial.println("Data sent!");
-    }
-    else
-    {
-        Serial.println("Failed to connect to server");
-    }
-}
-
-void loop()
-{
-    // nothing
-}
-*/
