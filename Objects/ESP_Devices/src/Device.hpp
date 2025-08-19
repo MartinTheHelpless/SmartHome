@@ -17,11 +17,11 @@ namespace smh
 
         uint8_t device_uid_ = 0;
 
-        std::string server_ip_ = "192.168.1.73";
+        std::string server_ip_ = "10.9.170.225";
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
-        std::string ssid = "My Precious Wifi";
-        std::string password = "supersecretpassword";
+        std::string ssid = "tmp_netw";
+        std::string password = "password";
 
         WiFiClient client;
 
@@ -44,6 +44,8 @@ namespace smh
 
             Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
 
+            client.stop();
+
             return true;
         }
 
@@ -60,6 +62,8 @@ namespace smh
             }
 
             Serial.println("\nWi-Fi connected!");
+            Serial.print("ESP IP address: ");
+            Serial.println(WiFi.localIP());
         }
 
         int readSocket(WiFiClient &client, uint8_t *buffer, int to_read = MAX_MESSAGE_SIZE)
@@ -85,7 +89,7 @@ namespace smh
             if (!client.connected())
             {
                 Serial.println("Connecting to server...");
-                if (client.connect("192.168.1.73", server_port_))
+                if (client.connect(server_ip_.c_str(), server_port_))
                 {
                     Serial.println("Connected to server!");
                     return true;
@@ -108,7 +112,9 @@ namespace smh
 
             size_t size = msg.serialize(buffer);
 
-            client.write((uint8_t *)buffer, size);
+            size_t sent = client.write(buffer, size);
+
+            Serial.printf("Sent %d bytes\n", sent);
         }
 
         Message receive_msg()
@@ -127,7 +133,7 @@ namespace smh
             if (!connect_to_server())
                 return false;
 
-            MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG);
+            MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG, device_name_.length());
 
             Message msg(header, device_name_.c_str());
 

@@ -18,8 +18,8 @@ namespace smh
         int read_socket(char *buffer, int to_read = MAX_MESSAGE_SIZE) const
         {
             int read_bytes = read(socket_fd_, buffer, to_read);
-            if (read_bytes > 0)
-                buffer[read_bytes] = '\0';
+            if (read_bytes < 0)
+                return -1;
 
             return read_bytes;
         }
