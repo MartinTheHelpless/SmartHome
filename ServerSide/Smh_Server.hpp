@@ -146,7 +146,7 @@ namespace smh
             return true;
         }
 
-        bool handle_MSG_get(const Message &msg, Messenger &courier)
+        bool handle_msg_get(const Message &msg, Messenger &courier)
         {
             MessageHeader header;
             std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_source_uid());
@@ -202,22 +202,28 @@ namespace smh
             return true;
         }
 
-        void handle_post_data(std::vector<std::string> data, Json_Device &json_dev)
+        void handle_post_data(std::string raw_messgae, Json_Device &json_dev)
         {
+            auto peripherals = json_dev.get_peripherals();
+
+            auto data = split_string(raw_messgae.c_str(), ';');
+
+            bool change_in_peripherals = false;
             for (auto message : data)
             {
                 std::vector<std::string> tokens = split_string(message, ':');
-                auto peripherals = json_dev.get_peripherals();
 
                 if (tokens[0] == "PERIPHERAL" && tokens.size() == 3)
                 {
-                    std::cout << "Peripheral data received: " << message << std::endl;
                     peripherals[tokens[1]] = tokens[2];
+                    change_in_peripherals = true;
                 }
+                if (change_in_peripherals)
+                    json_dev.set_peripherals(peripherals);
             }
         }
 
-        bool handle_MSG_post(const Message &msg)
+        bool handle_msg_post(const Message &msg)
         {
             std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_source_uid());
 
@@ -227,18 +233,15 @@ namespace smh
             // TODO: Add a detection and handling for message subtypes, such as PERIPHERAL, STATE, ERROR, etc.
 
             Json_Device device_data;
-
             {
                 std::lock_guard<std::mutex> lock(srv_json_mutex);
                 file_helper.get_device_json(device_name.value(), device_data);
             }
-            std::vector<std::string> data_messages = split_string(msg.get_payload_str(), ';');
 
-            handle_post_data(data_messages, device_data);
+            handle_post_data(msg.get_payload_str(), device_data);
 
-            /*
             std::vector<int> subs = device_data.get_subscribers();
-            std::string payload = msg.get_payload_str();
+            std::string payload = device_name.value() + ":" + msg.get_payload_str();
             for (int sub_uid : subs)
             {
                 std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
@@ -254,7 +257,6 @@ namespace smh
 
                 sub_device.add_dirty_data(payload);
             }
-            */
             return true;
         }
 
@@ -263,6 +265,9 @@ namespace smh
             Json_Device json_data;
             std::lock_guard<std::mutex> lock(srv_json_mutex);
             file_helper.get_device_json(device_to_sub_to, json_data);
+
+            if (json_data.get_uid() == uid_subscriber)
+                return;
 
             json_data.add_subscriber(uid_subscriber);
         }
@@ -284,12 +289,12 @@ namespace smh
             {
             case MSG_GET: // Requests dirty data from server, expects response
             {
-                handle_MSG_get(msg, courier);
+                handle_msg_get(msg, courier);
                 break;
             }
 
             case MSG_POST: // Only info for the server, need to save incomming data to file, maybe forward to subscribers
-                handle_MSG_post(msg);
+                handle_msg_post(msg);
                 break;
 
             case MSG_PING: // basically just a keepalive, update last contact time on file

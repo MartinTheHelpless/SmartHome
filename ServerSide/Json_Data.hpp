@@ -12,6 +12,8 @@
 #include <map>
 #include <optional>
 
+#include "../Utils/Helper_Functions.hpp"
+
 enum class DeviceState : uint8_t
 {
     OFF = 0,
@@ -106,9 +108,8 @@ private:
         for (char c : str)
         {
             if (isdigit(c))
-            {
                 num += c;
-            }
+
             else if (!num.empty())
             {
                 vec.push_back(std::stoi(num));
@@ -122,46 +123,37 @@ private:
 
     std::string map_to_string(const std::map<std::string, std::string> &m) const
     {
-        std::string result;
-        for (auto it = m.begin(); it != m.end(); ++it)
-        {
-            result += it->first + ":" + it->second;
-            if (std::next(it) != m.end())
-            {
-                result += ";";
-            }
-        }
+        std::string result = "[";
+        for (auto [peripheral, value] : m)
+            result += peripheral + ":" + value + ";";
+
+        result[result.length() - 1] = ']';
         return result;
     }
 
     std::map<std::string, std::string> string_to_map(const std::string &str)
     {
-        std::map<std::string, std::string> result;
-        size_t start = 0;
-        while (start < str.size())
+        std::map<std::string, std::string> per_map;
+
+        size_t str_begin = str.find('[') + 1;
+        size_t str_end = str.find(']');
+        if (str_end == std::string::npos || str_begin >= str_end)
+            return std::map<std::string, std::string>();
+
+        std::string data = str.substr(str_begin, str_end - str_begin);
+
+        std::vector<std::string> tokens = smh::split_string(data, ';');
+
+        for (auto pair : tokens)
         {
-            size_t sep = str.find(':', start);
-            size_t end = str.find(';', start);
+            auto per_val = smh::split_string(pair, ':');
+            if (per_val.size() != 2)
+                continue;
 
-            if (sep == std::string::npos)
-                break; // no more valid pairs
-
-            std::string key = str.substr(start, sep - start);
-            std::string value;
-            if (end == std::string::npos)
-            {
-                value = str.substr(sep + 1);
-                result[key] = value;
-                break;
-            }
-            else
-            {
-                value = str.substr(sep + 1, end - sep - 1);
-                result[key] = value;
-                start = end + 1;
-            }
+            per_map[per_val[0]] = per_val[1];
         }
-        return result;
+
+        return per_map;
     }
 
 public:
@@ -283,7 +275,11 @@ public:
     void set_last_ip(const std::string &value) { last_ip = value; }
     void set_settings(const std::vector<std::string> &value) { settings = value; }
     void set_error_log(const std::vector<std::string> &value) { error_log = value; }
-    void set_peripherals(const std::map<std::string, std::string> &value) { peripherals = value; }
+    void set_peripherals(const std::map<std::string, std::string> &value)
+    {
+        peripherals = value;
+        save();
+    }
     void set_subscribers(const std::vector<int> &value) { subscribers = value; }
     void add_subscriber(int uid)
     {
