@@ -28,7 +28,7 @@ namespace smh
         {
             std::vector<uint8_t> buffer(MAX_MESSAGE_SIZE);
             int read_bytes = read_socket(reinterpret_cast<char *>(buffer.data()), buffer.size());
-            std::cout << "Read amount of bytes: " << read_bytes << std::endl;
+            std::cout << "Received amount of bytes: " << read_bytes << std::endl;
 
             if (read_bytes <= 0)
                 return Message(std::vector<uint8_t>());

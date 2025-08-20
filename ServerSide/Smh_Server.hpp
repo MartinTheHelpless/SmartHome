@@ -145,8 +145,7 @@ namespace smh
             return true;
         }
 
-        bool
-        handle_MSG_get(const Message &msg, Messenger &courier)
+        bool handle_MSG_get(const Message &msg, Messenger &courier)
         {
             MessageHeader header;
             std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_source_uid());
@@ -208,6 +207,8 @@ namespace smh
 
             if (device_name == std::nullopt)
                 return false;
+
+            // TODO: Add a detection and handling for message subtypes, such as PERIPHERAL, STATE, ERROR, etc.
 
             Json_Device device_data;
 
@@ -273,6 +274,8 @@ namespace smh
 
             case MSG_PING: // basically just a keepalive, update last contact time on file
             {
+                std::cout << "received ping" << std::endl;
+
                 Json_Device json_data;
                 std::optional<std::string> device_uid = server_data.try_get_device_by_uid(msg.get_header_source_uid());
                 if (device_uid != std::nullopt)
