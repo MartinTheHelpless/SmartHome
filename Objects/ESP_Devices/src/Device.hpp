@@ -8,6 +8,7 @@
 
 #include "../../../Utils/Defines.hpp"
 #include "../../Comms/Message.hpp"
+#include "../../../Utils/Helper_Functions.hpp"
 
 template <typename... Args>
 std::string string_format(const std::string &format, Args... args)
@@ -31,18 +32,18 @@ namespace smh
 
         uint8_t device_uid_ = 0;
 
-        std::string server_ip_ = "10.9.170.225";
+        std::string server_ip_ = "10.42.0.1";
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
-        std::string ssid = "wifi";
-        std::string password = "pass";
+        std::string ssid = "tmp_netw";
+        std::string password = "password";
 
         std::vector<std::pair<std::string, std::string>> peripherals = {
-
-            {"temperature", "23.5"},
-            {"pressure", "100.1"},
-            {"humidity", "25.3"},
-            {"UV", "7"}
+            {"temperature", "1200.7"},
+            {"pressure", "1800.4"},
+            {"humidity", "45.0"},
+            {"UV", "6"},
+            {"LED", "ON_OFF"}
 
         }; // TODO: Add peripheral send logic to init message on server and here
            // Peripherals will be sent with their data, not in inti message.
@@ -73,6 +74,7 @@ namespace smh
 
         std::shared_ptr<Message> receive_msg()
         {
+
             const int HEADER_SIZE = sizeof(MessageHeader);
 
             unsigned long start = millis();
@@ -128,7 +130,52 @@ namespace smh
         }
 
     public:
-        Smh_Device(std::string device_name) : device_name_(device_name) {}
+        virtual void handle_in_socket()
+        {
+            std::shared_ptr<smh::Message> msg;
+
+            if (client.available() > 0)
+                msg = receive_msg();
+
+            if (!msg->is_valid())
+                return;
+
+            switch (msg->get_message_type())
+            {
+            case Smh_Msg_Type::MSG_CONTROLL:
+            {
+                Serial.println("Received control message");
+
+                auto control_messages = split_string(msg->get_payload_str().c_str(), ';');
+
+                for (auto message : control_messages)
+                {
+                    auto periph_action = split_string(message.c_str(), ':');
+
+                    if (periph_action.size() != 2)
+                        continue;
+
+                    if (periph_action[0] == "LED")
+                    {
+                        if (periph_action[1] == "ON")
+                            digitalWrite(LED_BUILTIN, LOW);
+                        else if (periph_action[1] == "OFF")
+                            digitalWrite(LED_BUILTIN, HIGH);
+                        else
+                            Serial.printf("Unknown action \"%s\" on peripheral %s", periph_action[1].c_str(), periph_action[0].c_str());
+                    }
+                }
+                break;
+            }
+
+            default:
+                break;
+            }
+        }
+
+        uint8_t get_uid() { return device_uid_; }
+
+        Smh_Device(std::string device_name) : device_name_(device_name) { pinMode(LED_BUILTIN, OUTPUT); }
         ~Smh_Device() {}
 
         bool Init()
@@ -160,7 +207,7 @@ namespace smh
         {
             Serial.begin(115200);
             WiFi.begin(ssid.c_str(), password.c_str());
-            Serial.print("Connecting to Wi-Fi");
+            Serial.print("\nConnecting to Wi-Fi");
 
             while (WiFi.status() != WL_CONNECTED)
             {
@@ -177,6 +224,7 @@ namespace smh
         {
             if (!client.connected())
             {
+                Serial.printf("Trying to connect to a server on %s:%d\n", server_ip_.c_str(), server_port_);
                 if (client.connect(server_ip_.c_str(), server_port_))
                     Serial.println("Connected to server!");
                 else
