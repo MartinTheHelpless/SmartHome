@@ -16,6 +16,7 @@
 #include "Smh_File_Helper.hpp"
 #include "Json_Data.hpp"
 #include "../Objects/Comms/Messenger.hpp"
+#include "../Utils/Helper_Functions.hpp"
 
 namespace smh
 {
@@ -201,6 +202,21 @@ namespace smh
             return true;
         }
 
+        void handle_post_data(std::vector<std::string> data, Json_Device &json_dev)
+        {
+            for (auto message : data)
+            {
+                std::vector<std::string> tokens = split_string(message, ':');
+                auto peripherals = json_dev.get_peripherals();
+
+                if (tokens[0] == "PERIPHERAL" && tokens.size() == 3)
+                {
+                    std::cout << "Peripheral data received: " << message << std::endl;
+                    peripherals[tokens[1]] = tokens[2];
+                }
+            }
+        }
+
         bool handle_MSG_post(const Message &msg)
         {
             std::optional<std::string> device_name = server_data.try_get_device_by_uid(msg.get_header_source_uid());
@@ -216,10 +232,13 @@ namespace smh
                 std::lock_guard<std::mutex> lock(srv_json_mutex);
                 file_helper.get_device_json(device_name.value(), device_data);
             }
+            std::vector<std::string> data_messages = split_string(msg.get_payload_str(), ';');
 
+            handle_post_data(data_messages, device_data);
+
+            /*
             std::vector<int> subs = device_data.get_subscribers();
             std::string payload = msg.get_payload_str();
-
             for (int sub_uid : subs)
             {
                 std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
@@ -235,6 +254,7 @@ namespace smh
 
                 sub_device.add_dirty_data(payload);
             }
+            */
             return true;
         }
 

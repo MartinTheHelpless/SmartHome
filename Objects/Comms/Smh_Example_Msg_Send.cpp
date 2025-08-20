@@ -5,6 +5,7 @@
 
 #include "Message.hpp"
 #include "../../ServerSide/Json_Data.hpp"
+#include "../../Utils/Helper_Functions.hpp"
 
 int send(uint8_t *buffer, int size)
 {
@@ -53,20 +54,6 @@ int send(uint8_t *buffer, int size)
     return sock;
 }
 
-std::vector<std::string> split_string(const std::string &input, char delimiter = ';')
-{
-    std::vector<std::string> tokens;
-    std::stringstream ss(input);
-    std::string token;
-
-    while (std::getline(ss, token, delimiter))
-    {
-        if (!token.empty()) // skip empty tokens
-            tokens.push_back(token);
-    }
-    return tokens;
-}
-
 int main(int argc, char const *argv[])
 {
     std::string payload = "This is an example subcriber data";
@@ -80,10 +67,10 @@ int main(int argc, char const *argv[])
         std::cout << "invalid message" << std::endl;
         return 1;
     }
-    uint8_t buffer2[MAX_MESSAGE_SIZE];
 
-    int sizee = msg.serialize(buffer2);
-    int sock = send(buffer2, sizee);
+    std::vector<uint8_t> buffer = msg.serialize();
+
+    int sock = send(buffer.data(), buffer.size());
 
     char buffera[MAX_MESSAGE_SIZE] = {0};
     int read_bytes = read(sock, buffera, sizeof(buffera) - 1);
@@ -98,7 +85,7 @@ int main(int argc, char const *argv[])
     std::cout << "Device New UID: " << msgs.get_header_dest_uid() << std::endl;
     std::cout << "Received from UID: " << msgs.get_header_source_uid() << std::endl;
 
-    std::vector<std::string> data_received = split_string(msgs.get_payload_str(), ';');
+    std::vector<std::string> data_received = smh::split_string(msgs.get_payload_str(), ';');
 
     for (auto line : data_received)
         std::cout << line << std::endl;

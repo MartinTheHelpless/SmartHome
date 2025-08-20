@@ -32,7 +32,7 @@ private:
 
     std::vector<std::string> settings;
     std::vector<std::string> error_log;
-    std::vector<std::string> peripherals;
+    std::map<std::string, std::string> peripherals;
 
     std::vector<int> subscribers;
 
@@ -120,6 +120,50 @@ private:
         return vec;
     }
 
+    std::string map_to_string(const std::map<std::string, std::string> &m) const
+    {
+        std::string result;
+        for (auto it = m.begin(); it != m.end(); ++it)
+        {
+            result += it->first + ":" + it->second;
+            if (std::next(it) != m.end())
+            {
+                result += ";";
+            }
+        }
+        return result;
+    }
+
+    std::map<std::string, std::string> string_to_map(const std::string &str)
+    {
+        std::map<std::string, std::string> result;
+        size_t start = 0;
+        while (start < str.size())
+        {
+            size_t sep = str.find(':', start);
+            size_t end = str.find(';', start);
+
+            if (sep == std::string::npos)
+                break; // no more valid pairs
+
+            std::string key = str.substr(start, sep - start);
+            std::string value;
+            if (end == std::string::npos)
+            {
+                value = str.substr(sep + 1);
+                result[key] = value;
+                break;
+            }
+            else
+            {
+                value = str.substr(sep + 1, end - sep - 1);
+                result[key] = value;
+                start = end + 1;
+            }
+        }
+        return result;
+    }
+
 public:
     bool is_valid;
 
@@ -178,7 +222,7 @@ public:
             else if (key == "\"error_log\"")
                 error_log = string_to_vec(value);
             else if (key == "\"peripherals\"")
-                peripherals = string_to_vec(value);
+                peripherals = string_to_map(value);
             else if (key == "\"subscribers\"")
                 subscribers = string_to_vec_int(value);
             else if (key == "\"dirty_data\"")
@@ -206,7 +250,7 @@ public:
         file << "  \"last_ip\": \"" << last_ip << "\",\n";
         file << "  \"settings\": " << vec_to_string(settings) << ",\n";
         file << "  \"error_log\": " << vec_to_string(error_log) << ",\n";
-        file << "  \"peripherals\": " << vec_to_string(peripherals) << ",\n";
+        file << "  \"peripherals\": " << map_to_string(peripherals) << ",\n";
         file << "  \"subscribers\": " << vec_to_string(subscribers) << ",\n";
         file << "  \"dirty_data\": " << vec_to_string(dirty_data) << ",\n";
         file << "  \"last_contact\": " << last_contact << ",\n";
@@ -227,7 +271,7 @@ public:
     std::vector<std::string> get_settings() const { return settings; }
     std::vector<std::string> get_dirty_data() const { return dirty_data; }
     std::vector<std::string> get_error_log() const { return error_log; }
-    std::vector<std::string> get_peripherals() const { return peripherals; }
+    std::map<std::string, std::string> get_peripherals() const { return peripherals; }
     std::vector<int> get_subscribers() const { return subscribers; }
     uint64_t get_last_contact() const { return last_contact; }
     DeviceState get_state() const { return state; }
@@ -239,7 +283,7 @@ public:
     void set_last_ip(const std::string &value) { last_ip = value; }
     void set_settings(const std::vector<std::string> &value) { settings = value; }
     void set_error_log(const std::vector<std::string> &value) { error_log = value; }
-    void set_peripherals(const std::vector<std::string> &value) { peripherals = value; }
+    void set_peripherals(const std::map<std::string, std::string> &value) { peripherals = value; }
     void set_subscribers(const std::vector<int> &value) { subscribers = value; }
     void add_subscriber(int uid)
     {
