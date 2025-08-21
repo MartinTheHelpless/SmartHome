@@ -28,6 +28,9 @@ namespace smh
         bool running_ = false;
 
         Json_Server server_data;
+        Json_Device website_data;
+
+        std::string website_json_name = "webs_device_ins";
 
         std::vector<std::future<void>> futures;
         std::mutex cout_mutex, srv_json_mutex;
@@ -121,6 +124,7 @@ namespace smh
                     client_device_uid = server_data.assign_new_uid(device_sw_mac);
 
                     client_device_json.set_uid(client_device_uid);
+                    client_device_json.add_subscriber(0);
 
                     // OPTIONAL: Add a way to contact all the other devices to tell them that a new device has appeared.
                     // So they could subsribe to their data
@@ -171,7 +175,6 @@ namespace smh
 
                 device_data.clear_dirty_data();
             }
-
             else
             {
                 header = create_header(SMH_SERVER_UID, device_data.get_uid(), MSG_POST);
@@ -210,9 +213,10 @@ namespace smh
             handle_post_data(msg.get_payload_str(), device_data);
 
             std::vector<int> subs = device_data.get_subscribers();
-            std::string payload = device_name + ":" + msg.get_payload_str();
+            std::string payload = msg.get_payload_str();
             for (int sub_uid : subs)
             {
+
                 std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
 
                 if (device_uid == std::nullopt)
@@ -224,7 +228,10 @@ namespace smh
                     file_helper.get_device_json(device_uid.value(), sub_device);
                 }
 
-                sub_device.add_dirty_data(payload);
+                auto messages = split_string(payload, ';');
+
+                for (auto message : messages)
+                    sub_device.add_dirty_data(device_name + ":" + message);
             }
             return true;
         }
@@ -377,30 +384,19 @@ namespace smh
         }
 
     public:
-        Server(int port_number, std::string srv_top_dir = SMH_SERVER_DIR_PATH)
-            : port_(port_number), file_helper(false, srv_top_dir)
-        {
-            std::lock_guard<std::mutex> lock(srv_json_mutex);
-            if (!file_helper.server_json_exists())
-            {
-                if (!file_helper.create_and_init_server_file(server_data))
-                    std::cout << "Error creating server json" << std::endl;
-            }
-            else
-                server_data = file_helper.get_server_json();
-        }
-
         Server(std::string srv_top_dir = SMH_SERVER_DIR_PATH, int port_number = DEFAULT_SERVER_PORT)
             : port_(port_number), file_helper(false, srv_top_dir)
         {
             std::lock_guard<std::mutex> lock(srv_json_mutex);
-            if (!file_helper.server_json_exists())
-            {
-                if (!file_helper.create_and_init_server_file(server_data))
-                    std::cout << "Error creating server json" << std::endl;
-            }
+            if (!file_helper.server_json_exists() && !file_helper.create_and_init_server_file(server_data))
+                std::cout << "Error creating server json" << std::endl;
             else
                 server_data = file_helper.get_server_json();
+
+            if (!file_helper.device_file_exists(website_json_name))
+                file_helper.create_and_init_device_file(website_json_name, website_data);
+            else
+                file_helper.get_device_json(website_json_name, website_data);
         }
 
         ~Server()

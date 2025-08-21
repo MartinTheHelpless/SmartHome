@@ -23,7 +23,7 @@ int main(int argc, char const *argv[])
 {
     auto dir_port_pair = parse_args(argc, argv);
 
-    smh::Server srv(dir_port_pair.second, dir_port_pair.first);
+    smh::Server srv(dir_port_pair.first, dir_port_pair.second);
     srv.run();
 
     return 0;

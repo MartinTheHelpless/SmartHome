@@ -127,7 +127,10 @@ private:
         for (auto [peripheral, value] : m)
             result += peripheral + ":" + value + ";";
 
-        result[result.length() - 1] = ']';
+        if (result.size() > 1)
+            result[result.length() - 1] = ']';
+        else
+            result += ']';
         return result;
     }
 
@@ -414,7 +417,7 @@ private:
     }
 
 public:
-    Json_Server() = default;
+    Json_Server() {}
     Json_Server(const std::string &file_path) : file_path_(file_path), next_uid(2), uptime_start(0)
     {
         load();
@@ -427,6 +430,9 @@ public:
         devices.clear();
         error_log.clear();
         uptime_start = 0;
+        devices[0] = "webs_device_ins";
+        devices[5] = "test_device_ins";
+        devices[4] = "test_device_out";
     }
 
     bool load()

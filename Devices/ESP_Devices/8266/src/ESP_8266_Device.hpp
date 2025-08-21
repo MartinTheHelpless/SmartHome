@@ -45,7 +45,7 @@ namespace smh
             {"pressure", "1800.4"},
             {"humidity", "45.0"},
             {"UV", "6"},
-            {"LED", "ON_OFF"}
+            {"LED", "C_ON_OFF"}
 
         }; // TODO: Add peripheral send logic to init message on server and here
         // Peripherals will be sent with their data, not in inti message.

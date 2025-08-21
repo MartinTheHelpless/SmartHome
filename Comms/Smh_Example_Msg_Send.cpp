@@ -56,9 +56,9 @@ int send(uint8_t *buffer, int size)
 
 int main(int argc, char const *argv[])
 {
-    std::string message = "LED:OFF";
+    std::string message = "";
 
-    smh::MessageHeader header = smh::create_header(5, 24, MSG_CONTROL, SMH_FLAG_NONE, message.size());
+    smh::MessageHeader header = smh::create_header(5, SMH_SERVER_UID, MSG_GET, SMH_FLAG_NONE, message.size());
 
     std::vector<uint8_t> payload(message.size(), 0);
 
