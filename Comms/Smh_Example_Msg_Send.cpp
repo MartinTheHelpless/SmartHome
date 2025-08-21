@@ -4,8 +4,8 @@
 #include <arpa/inet.h>
 
 #include "Message.hpp"
-#include "../../ServerSide/Json_Data.hpp"
-#include "../../Utils/Helper_Functions.hpp"
+#include "../ServerSide/Json_Data.hpp"
+#include "../Utils/Helper_Functions.hpp"
 
 int send(uint8_t *buffer, int size)
 {

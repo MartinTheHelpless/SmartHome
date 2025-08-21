@@ -12,10 +12,10 @@
 #include <sstream>
 
 #include "../Utils/Defines.hpp"
-#include "../Objects/Comms/Message.hpp"
+#include "../Comms/Message.hpp"
 #include "Smh_File_Helper.hpp"
 #include "Json_Data.hpp"
-#include "../Objects/Comms/Messenger.hpp"
+#include "../Comms/Messenger.hpp"
 #include "../Utils/Helper_Functions.hpp"
 
 namespace smh

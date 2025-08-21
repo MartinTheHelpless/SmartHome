@@ -2,7 +2,7 @@
 #include <arpa/inet.h>
 
 #include "Message.hpp"
-#include "../../ServerSide/Json_Data.hpp"
+#include "../ServerSide/Json_Data.hpp"
 
 namespace smh
 {
