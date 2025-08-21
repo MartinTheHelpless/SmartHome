@@ -48,11 +48,11 @@ namespace smh
 
         bool send_msg_to_ip(const Message &msg, std::string dest_ip)
         {
-            socket_fd_ = socket(AF_INET, SOCK_STREAM, 0);
-            if (socket_fd_ < 0)
+            int sock = socket(AF_INET, SOCK_STREAM, 0);
+            if (sock < 0)
             {
-                perror("Socket creation failed");
-                return false;
+                std::cerr << "Socket creation failed\n";
+                return 1;
             }
 
             sockaddr_in server_addr{};
@@ -61,29 +61,25 @@ namespace smh
 
             if (inet_pton(AF_INET, dest_ip.c_str(), &server_addr.sin_addr) <= 0)
             {
-                perror("Invalid address/Address not supported");
-                close(socket_fd_);
-                return false;
+                std::cerr << "Invalid address / Address not supported\n";
+                return 1;
             }
 
-            if (connect(socket_fd_, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+            if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
             {
-                perror("Connection failed");
-                close(socket_fd_);
-                return false;
+                std::cerr << "Connection failed\n";
+                return 1;
             }
 
-            auto send_buffer = msg.serialize();
-            int sent_bytes = send(socket_fd_, send_buffer.data(), send_buffer.size(), 0);
-            if (sent_bytes < 0)
-            {
-                perror("Send failed");
-                close(socket_fd_);
-                return false;
-            }
+            auto buff = msg.serialize();
 
-            std::cout << "Control Message forwarded (" << sent_bytes << " bytes)\n";
-            close(socket_fd_);
+            send(sock, buff.data(), buff.size(), 0);
+            usleep(100000);
+            close(sock);
+
+            std::cout << "Message sent!\n";
+
+            close(sock);
             return true;
         }
     };
