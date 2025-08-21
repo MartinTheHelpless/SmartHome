@@ -1,11 +1,26 @@
 
-#include "Device.hpp"
+#include "ESP_8266_Device.hpp"
 
-smh::Smh_Device device("test_device_out");
+smh::ESP8266_Device device("test_device_out");
 
 WiFiServer server(DEFAULT_CLIENT_PORT);
 
 int test = 0;
+
+void flash_pin(int pin)
+{
+    Serial.printf("Flashing pin: %d\n", pin);
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
+    delay(300);
+    digitalWrite(pin, LOW);
+    delay(300);
+    digitalWrite(pin, HIGH);
+    delay(300);
+    digitalWrite(pin, LOW);
+    delay(300);
+    digitalWrite(pin, HIGH);
+}
 
 void setup()
 {
@@ -43,11 +58,11 @@ void loop()
 {
     device.check_incomming_message(server);
     delay(5);
-    /*if (test == 200)
+    if (test == 200)
         send_controll_message(false), ++test;
     else if (test == 400)
         send_controll_message(true),
             test = 0;
     else
-        ++test;*/
+        ++test;
 }

@@ -1,14 +1,16 @@
 #include <string>
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include <esp8266WIFi.h>
 
 #include <iterator>
 #include <memory>
 #include <exception>
 
-#include "../../../Utils/Defines.hpp"
-#include "../../Comms/Message.hpp"
-#include "../../../Utils/Helper_Functions.hpp"
+#include "Utils/Defines.hpp"
+#include "Comms/Message.hpp"
+#include "Utils/Helper_Functions.hpp"
+
+#define LED_BUILTIN 2
 
 template <typename... Args>
 std::string string_format(const std::string &format, Args... args)
@@ -24,7 +26,7 @@ std::string string_format(const std::string &format, Args... args)
 
 namespace smh
 {
-    class Smh_Device
+    class ESP8266_Device
     {
     protected:
         std::string ip_ = "";
@@ -232,12 +234,12 @@ namespace smh
 
         uint8_t get_uid() { return device_uid_; }
 
-        Smh_Device(std::string device_name) : device_name_(device_name)
+        ESP8266_Device(std::string device_name) : device_name_(device_name)
         {
             pinMode(LED_BUILTIN, OUTPUT);
             digitalWrite(LED_BUILTIN, HIGH);
         }
-        ~Smh_Device() {}
+        ~ESP8266_Device() {}
 
         bool Init()
         {
@@ -264,21 +266,27 @@ namespace smh
             return true;
         }
 
-        void connect_to_wifi()
+        bool connect_to_wifi()
         {
             Serial.begin(115200);
             WiFi.begin(ssid.c_str(), password.c_str());
             Serial.print("\nConnecting to Wi-Fi");
 
+            unsigned long start = millis();
             while (WiFi.status() != WL_CONNECTED)
             {
-                delay(500);
+                if (millis() - start > 10000)
+                { // 10s timeout
+                    Serial.println("\nWiFi connect failed!");
+                    return false;
+                }
+                delay(500); // yields to FreeRTOS
                 Serial.print(".");
             }
-
             Serial.println("\nWi-Fi connected!");
             Serial.print("ESP IP address: ");
             Serial.println(WiFi.localIP());
+            return true;
         }
 
         bool connect_to_server()
