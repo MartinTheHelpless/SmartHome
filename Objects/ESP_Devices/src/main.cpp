@@ -1,8 +1,11 @@
+
 #include "Device.hpp"
 
 smh::Smh_Device device("test_device_out");
 
-WiFiServer server(9000);
+WiFiServer server(DEFAULT_CLIENT_PORT);
+
+int test = 0;
 
 void setup()
 {
@@ -13,9 +16,17 @@ void setup()
 
     // device.send_peripheral_data_to_server();
 
-    Serial.println("Sending the control message");
+    server.begin();
+}
 
-    std::string message = "LED:OFF";
+void send_controll_message(bool on)
+{
+    std::string message;
+
+    if (on)
+        message = "LED:ON";
+    else
+        message = "LED:OFF";
 
     std::vector<uint8_t> payload(message.size(), 0);
 
@@ -26,12 +37,17 @@ void setup()
     std::shared_ptr<smh::Message> msg = std::make_shared<smh::Message>(header, payload);
 
     device.send_message_to_server(msg);
-
-    Serial.println("Control message sent ");
 }
 
 void loop()
 {
-    device.handle_server_messages();
+    device.check_incomming_message(server);
     delay(5);
+    /*if (test == 200)
+        send_controll_message(false), ++test;
+    else if (test == 400)
+        send_controll_message(true),
+            test = 0;
+    else
+        ++test;*/
 }
