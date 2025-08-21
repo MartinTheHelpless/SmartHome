@@ -9,6 +9,8 @@
 #define DEFAULT_SERVER_PORT 9000
 #define DEFAULT_SERVER_IP "192.168.1.100"
 
+#define DEFAULT_CLIENT_PORT 8000
+
 #define SMH_SERVER_UID 1
 
 #define MAX_MESSAGE_SIZE 2048
@@ -22,7 +24,7 @@ enum Smh_Msg_Type : uint8_t
     MSG_SUBSCRIBE_MULTI = 4,   // Subscribe to multiple devices
     MSG_UNSUBSCRIBE = 5,       // Unsubscribe to a device info
     MSG_UNSUBSCRIBE_MULTI = 6, // Unsubscribe from multiple devices
-    MSG_CONTROLL = 7           // Controll destination device peripherals
+    MSG_CONTROL = 7            // Controll destination device peripherals
 };
 static_assert(sizeof(Smh_Msg_Type) == 1, "Smh_Msg_Type must be 1 byte");
 

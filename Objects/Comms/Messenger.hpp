@@ -46,6 +46,45 @@ namespace smh
             return sent_bytes;
         }
 
-        bool send_msg_to_ip() { return false; }
+        bool send_msg_to_ip(const Message &msg, std::string dest_ip)
+        {
+            socket_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+            if (socket_fd_ < 0)
+            {
+                perror("Socket creation failed");
+                return false;
+            }
+
+            sockaddr_in server_addr{};
+            server_addr.sin_family = AF_INET;
+            server_addr.sin_port = htons(DEFAULT_CLIENT_PORT);
+
+            if (inet_pton(AF_INET, dest_ip.c_str(), &server_addr.sin_addr) <= 0)
+            {
+                perror("Invalid address/Address not supported");
+                close(socket_fd_);
+                return false;
+            }
+
+            if (connect(socket_fd_, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+            {
+                perror("Connection failed");
+                close(socket_fd_);
+                return false;
+            }
+
+            auto send_buffer = msg.serialize();
+            int sent_bytes = send(socket_fd_, send_buffer.data(), send_buffer.size(), 0);
+            if (sent_bytes < 0)
+            {
+                perror("Send failed");
+                close(socket_fd_);
+                return false;
+            }
+
+            std::cout << "Control Message forwarded (" << sent_bytes << " bytes)\n";
+            close(socket_fd_);
+            return true;
+        }
     };
 }

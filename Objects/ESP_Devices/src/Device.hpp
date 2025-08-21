@@ -52,6 +52,9 @@ namespace smh
 
         WiFiClient client;
 
+        WiFiServer device_server{DEFAULT_CLIENT_PORT};
+        WiFiClient inbound_client;
+
         std::vector<uint8_t> readSocket(WiFiClient &client, int to_read = MAX_MESSAGE_SIZE)
         {
             if (!client.connected())
@@ -74,7 +77,6 @@ namespace smh
 
         std::shared_ptr<Message> receive_msg()
         {
-
             const int HEADER_SIZE = sizeof(MessageHeader);
 
             unsigned long start = millis();
@@ -109,9 +111,10 @@ namespace smh
 
             buffer.insert(buffer.end(), payload.begin(), payload.begin() + bytesRead);
 
-            return std::make_shared<Message>(buffer);
+            return std::make_shared<Message>(header, payload);
         }
 
+    public:
         bool send_message_to_server(std::shared_ptr<Message> msg)
         {
             if (!client.connected() && !connect_to_server())
@@ -129,47 +132,84 @@ namespace smh
             return true;
         }
 
-    public:
-        virtual void handle_in_socket()
+        std::shared_ptr<Message> receive_msg_from(WiFiClient &sock)
         {
-            std::shared_ptr<smh::Message> msg;
-
-            if (client.available() > 0)
-                msg = receive_msg();
-
-            if (!msg->is_valid())
-                return;
-
-            switch (msg->get_message_type())
+            const int HEADER_SIZE = sizeof(MessageHeader);
+            unsigned long start = millis();
+            while (sock.available() < HEADER_SIZE)
             {
-            case Smh_Msg_Type::MSG_CONTROLL:
-            {
-                Serial.println("Received control message");
-
-                auto control_messages = split_string(msg->get_payload_str().c_str(), ';');
-
-                for (auto message : control_messages)
-                {
-                    auto periph_action = split_string(message.c_str(), ':');
-
-                    if (periph_action.size() != 2)
-                        continue;
-
-                    if (periph_action[0] == "LED")
-                    {
-                        if (periph_action[1] == "ON")
-                            digitalWrite(LED_BUILTIN, LOW);
-                        else if (periph_action[1] == "OFF")
-                            digitalWrite(LED_BUILTIN, HIGH);
-                        else
-                            Serial.printf("Unknown action \"%s\" on peripheral %s", periph_action[1].c_str(), periph_action[0].c_str());
-                    }
-                }
-                break;
+                if (millis() - start > 2000)
+                    return std::make_shared<Message>(std::vector<uint8_t>());
+                delay(5);
             }
 
-            default:
-                break;
+            std::vector<uint8_t> buffer(HEADER_SIZE);
+            sock.read(buffer.data(), HEADER_SIZE);
+            MessageHeader header;
+            memcpy(&header, buffer.data(), HEADER_SIZE);
+
+            std::vector<uint8_t> payload(header.payload_size);
+            int bytesRead = 0;
+            start = millis();
+            while (bytesRead < header.payload_size)
+            {
+                int avail = sock.available();
+                if (avail > 0)
+                {
+                    int toRead = std::min(avail, header.payload_size - bytesRead);
+                    bytesRead += sock.read(payload.data() + bytesRead, toRead);
+                }
+                if (millis() - start > 2000)
+                    break;
+                delay(5);
+            }
+
+            buffer.insert(buffer.end(), payload.begin(), payload.begin() + bytesRead);
+            return std::make_shared<Message>(header, payload);
+        }
+
+        virtual void handle_in_socket()
+        {
+            if (!inbound_client || !inbound_client.connected())
+                inbound_client = device_server.available();
+
+            if (inbound_client && inbound_client.connected() && inbound_client.available())
+            {
+                Serial.printf("Received a connection from server\n");
+                std::shared_ptr<smh::Message> msg = receive_msg_from(inbound_client);
+                if (!msg || !msg->is_valid())
+                    return;
+                Serial.printf("Payload: %s\n", msg->get_payload_str().c_str());
+
+                switch (msg->get_message_type())
+                {
+                case Smh_Msg_Type::MSG_CONTROL:
+                {
+                    Serial.println("Received control message");
+                    auto control_messages = split_string(msg->get_payload_str().c_str(), ';');
+                    for (auto message : control_messages)
+                    {
+                        auto periph_action = split_string(message.c_str(), ':');
+                        if (periph_action.size() != 2)
+                            continue;
+                        Serial.println(message.c_str());
+
+                        if (periph_action[0] == "LED")
+                        {
+                            if (periph_action[1] == "ON")
+                                digitalWrite(LED_BUILTIN, LOW);
+                            else if (periph_action[1] == "OFF")
+                                digitalWrite(LED_BUILTIN, HIGH);
+                            else
+                                Serial.printf("Unknown action \"%s\" on peripheral %s",
+                                              periph_action[1].c_str(), periph_action[0].c_str());
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
             }
         }
 
@@ -199,6 +239,8 @@ namespace smh
             client.stop();
 
             Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
+
+            device_server.begin();
 
             return true;
         }

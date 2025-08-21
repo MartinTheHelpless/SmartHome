@@ -161,12 +161,9 @@ public:
 
     Json_Device() = default;
 
-    Json_Device(const std::string &file_path) : file_path_(file_path), state(DeviceState::UNKNOWN), last_contact(0)
-    {
-        is_valid = load();
-    }
+    Json_Device(const std::string &file_path) : file_path_(file_path), state(DeviceState::UNKNOWN), last_contact(0) { is_valid = load(); }
 
-    ~Json_Device() = default;
+    ~Json_Device() { save_update_last_contact(); };
 
     void init(const std::string &default_name, uint8_t default_uid = 0, const std::string &default_ip = "0.0.0.0",
               const std::string &default_type = "Unknown")
@@ -229,6 +226,12 @@ public:
         return true;
     }
 
+    bool save_update_last_contact()
+    {
+        set_last_contact_now();
+        return save();
+    }
+
     bool save() const
     {
         std::ofstream file(file_path_);
@@ -250,6 +253,7 @@ public:
         file << "}\n";
 
         file.close();
+
         return true;
     }
 
@@ -275,39 +279,23 @@ public:
     void set_last_ip(const std::string &value) { last_ip = value; }
     void set_settings(const std::vector<std::string> &value) { settings = value; }
     void set_error_log(const std::vector<std::string> &value) { error_log = value; }
-    void set_peripherals(const std::map<std::string, std::string> &value)
-    {
-        peripherals = value;
-        save();
-    }
+    void set_peripherals(const std::map<std::string, std::string> &value) { peripherals = value; }
     void set_subscribers(const std::vector<int> &value) { subscribers = value; }
     void add_subscriber(int uid)
     {
         if (std::find(subscribers.begin(), subscribers.end(), uid) == subscribers.end())
-        {
             subscribers.push_back(uid);
-            save();
-        }
     }
 
-    void clear_dirty_data()
-    {
-        dirty_data.clear();
-        save();
-    }
+    void clear_dirty_data() { dirty_data.clear(); }
 
-    void add_dirty_data(std::string data)
-    {
-        dirty_data.push_back(data);
-        save();
-    }
+    void add_dirty_data(std::string data) { dirty_data.push_back(data); }
 
     void remove_subscriber(const int &uid)
     {
         subscribers.erase(
             std::remove(subscribers.begin(), subscribers.end(), uid),
             subscribers.end());
-        save();
     }
     void set_last_contact(uint64_t value) { last_contact = value; }
     void set_state(DeviceState value) { state = value; }
@@ -316,7 +304,6 @@ public:
         auto now = std::chrono::system_clock::now();
         uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
         set_last_contact(now_ms);
-        save();
     }
 };
 

@@ -56,11 +56,15 @@ int send(uint8_t *buffer, int size)
 
 int main(int argc, char const *argv[])
 {
-    std::string payload = "This is an example subcriber data";
+    std::string message = "LED:OFF";
 
-    smh::MessageHeader header = smh::create_header(5, SMH_SERVER_UID, MSG_GET, SMH_FLAG_NONE);
+    smh::MessageHeader header = smh::create_header(5, 24, MSG_CONTROL, SMH_FLAG_NONE, message.size());
 
-    smh::Message msg(header);
+    std::vector<uint8_t> payload(message.size(), 0);
+
+    std::copy(message.begin(), message.end(), payload.data());
+
+    smh::Message msg(header, payload);
 
     if (!msg.is_valid())
     {
