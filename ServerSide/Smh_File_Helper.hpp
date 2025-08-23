@@ -119,6 +119,13 @@ namespace smh
 
         bool create_and_init_device_file(std::string device_name, Json_Device &data)
         {
+
+            if (device_file_exists(device_name))
+            {
+                get_device_json(device_name, data);
+                return true;
+            }
+
             if (strstr(device_name.c_str(), "out")) // outside device
                 create_outside_device_file(device_name);
             else if (strstr(device_name.c_str(), "ins")) // inside device
@@ -156,6 +163,29 @@ namespace smh
             return true;
         }
 
+        bool create_and_init_website_file(Json_Website &data)
+        {
+            std::string webs_json_path = fs::path(srv_top_dir_path_ / "website_data.json");
+
+            std::ofstream file(webs_json_path);
+            if (!file)
+            {
+                std::cerr << "Failed to create server json file\n";
+                return false;
+            }
+            data = Json_Website(webs_json_path);
+            data.init();
+            data.save();
+
+            return true;
+        }
+
+        bool website_json_exists()
+        {
+            std::string srv_json_path = fs::path(srv_top_dir_path_ / "website_data.json");
+            return fs::exists(srv_json_path);
+        }
+
         bool server_json_exists()
         {
             std::string srv_json_path = fs::path(srv_top_dir_path_ / "server.json");
@@ -167,6 +197,13 @@ namespace smh
             std::string srv_json_path = fs::path(srv_top_dir_path_ / "server.json");
 
             return Json_Server(srv_json_path);
+        }
+
+        Json_Website get_website_json()
+        {
+            std::string srv_json_path = fs::path(srv_top_dir_path_ / "website_data.json");
+
+            return Json_Website(srv_json_path);
         }
 
         void get_device_json(std::string device_name, Json_Device &device)

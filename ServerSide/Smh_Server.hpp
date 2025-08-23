@@ -28,7 +28,8 @@ namespace smh
         bool running_ = false;
 
         Json_Server server_data;
-        Json_Device website_data;
+        Json_Website website_data;
+        Json_Device raw_website_data;
 
         std::string website_json_name = "webs_device_ins";
 
@@ -194,7 +195,7 @@ namespace smh
             {
                 std::vector<std::string> tokens = split_string(message, ':');
 
-                if (tokens[0] == "PERIPHERAL" && tokens.size() == 3)
+                if ((tokens[0] == "PERIPHERAL_S" || tokens[0] == "PERIPHERAL_C") && tokens.size() == 3)
                 {
                     peripherals[tokens[1]] = tokens[2];
                     change_in_peripherals = true;
@@ -214,25 +215,29 @@ namespace smh
 
             std::vector<int> subs = device_data.get_subscribers();
             std::string payload = msg.get_payload_str();
-            for (int sub_uid : subs)
-            {
 
-                std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
-
-                if (device_uid == std::nullopt)
-                    continue;
-
-                Json_Device sub_device;
+            if (msg.get_payload_size() > 0)
+                for (int sub_uid : subs)
                 {
-                    std::lock_guard<std::mutex> lock(srv_json_mutex);
-                    file_helper.get_device_json(device_uid.value(), sub_device);
+                    std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
+
+                    if (device_uid == std::nullopt)
+                        continue;
+
+                    Json_Device sub_device;
+                    {
+                        std::lock_guard<std::mutex> lock(srv_json_mutex);
+                        file_helper.get_device_json(device_uid.value(), sub_device);
+                    }
+
+                    auto messages = split_string(payload, ';');
+
+                    for (auto message : messages)
+                        sub_device.add_dirty_data(device_name + ":" + message);
                 }
 
-                auto messages = split_string(payload, ';');
+            website_data.parse_raw_data(raw_website_data);
 
-                for (auto message : messages)
-                    sub_device.add_dirty_data(device_name + ":" + message);
-            }
             return true;
         }
 
@@ -394,9 +399,14 @@ namespace smh
                 server_data = file_helper.get_server_json();
 
             if (!file_helper.device_file_exists(website_json_name))
-                file_helper.create_and_init_device_file(website_json_name, website_data);
+                file_helper.create_and_init_device_file(website_json_name, raw_website_data);
             else
-                file_helper.get_device_json(website_json_name, website_data);
+                file_helper.get_device_json(website_json_name, raw_website_data);
+
+            if (!file_helper.website_json_exists())
+                file_helper.create_and_init_website_file(website_data);
+            else
+                website_data = file_helper.get_website_json();
         }
 
         ~Server()

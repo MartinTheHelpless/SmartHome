@@ -40,12 +40,16 @@ namespace smh
         std::string ssid = "tmp_netw";
         std::string password = "password";
 
-        std::vector<std::pair<std::string, std::string>> peripherals = {
+        std::vector<std::pair<std::string, std::string>> peripherals_sensors = {
             {"temperature", "1200.7"},
             {"pressure", "1800.4"},
             {"humidity", "45.0"},
-            {"UV", "6"},
-            {"LED", "ON_OFF"}
+            {"UV", "6"}
+
+        };
+
+        std::vector<std::pair<std::string, std::string>> peripherals_controls = {
+            {"LED", "on_OFF"}
 
         }; // TODO: Add peripheral send logic to init message on server and here
         // Peripherals will be sent with their data, not in inti message.
@@ -319,13 +323,16 @@ namespace smh
 
         bool send_peripheral_data_to_server()
         {
-            if (peripherals.size() == 0)
+            if (peripherals_sensors.size() | peripherals_controls.size() == 0)
                 return send_ping_to_server();
 
             std::string data;
 
-            for (const auto &[peripheral, value] : peripherals)
-                data += string_format("PERIPHERAL:%s:%s;", peripheral.c_str(), value.c_str());
+            for (const auto &[peripheral, value] : peripherals_sensors)
+                data += string_format("PERIPHERAL_S:%s:%s;", peripheral.c_str(), value.c_str());
+
+            for (const auto &[peripheral, value] : peripherals_controls)
+                data += string_format("PERIPHERAL_C:%s:%s;", peripheral.c_str(), value.c_str());
 
             data[data.length() - 1] = 0;
 

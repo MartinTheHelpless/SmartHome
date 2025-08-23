@@ -11,8 +11,11 @@
 #include <cctype>
 #include <map>
 #include <optional>
+#include <filesystem>
 
 #include "../Utils/Helper_Functions.hpp"
+
+namespace fs = std::filesystem;
 
 enum class DeviceState : uint8_t
 {
@@ -237,7 +240,8 @@ public:
 
     bool save() const
     {
-        std::ofstream file(file_path_);
+        std::string tmp_file_path = file_path_ + ".tmp";
+        std::ofstream file(tmp_file_path);
         if (!file.is_open())
             return false;
 
@@ -256,6 +260,8 @@ public:
         file << "}\n";
 
         file.close();
+
+        fs::rename(fs::path(tmp_file_path), fs::path(file_path_));
 
         return true;
     }
@@ -290,7 +296,11 @@ public:
             subscribers.push_back(uid);
     }
 
-    void clear_dirty_data() { dirty_data.clear(); }
+    void clear_dirty_data()
+    {
+        dirty_data.clear();
+        save();
+    }
 
     void add_dirty_data(std::string data) { dirty_data.push_back(data); }
 
@@ -536,4 +546,231 @@ public:
         uptime_start = now_ms;
         save();
     }
+};
+
+struct Device_Data
+{
+    std::string name;
+    std::string type;
+    std::string location;
+    std::map<std::string, std::string> data;
+    std::map<std::string, std::string> controls;
+};
+
+class Json_Website
+{
+private:
+    std::string file_path_;
+    std::map<std::string, Device_Data> devices_;
+
+    static std::string map_to_string(const std::map<std::string, std::string> &m)
+    {
+        std::ostringstream oss;
+        oss << "{";
+        size_t i = 0;
+        for (const auto &kv : m)
+        {
+            oss << "\"" << kv.first << "\":\"" << kv.second << "\"";
+            if (i + 1 < m.size())
+                oss << ",";
+            i++;
+        }
+        oss << "}";
+        return oss.str();
+    }
+
+    static std::map<std::string, std::string> string_to_map(const std::string &str)
+    {
+        std::map<std::string, std::string> m;
+        std::string key, value;
+        bool in_key = false, in_value = false;
+        bool reading_key = true;
+        for (char c : str)
+        {
+            if (c == '"')
+            {
+                if (!in_key && !in_value)
+                {
+                    if (reading_key)
+                        in_key = true;
+                    else
+                        in_value = true;
+                }
+                else if (in_key)
+                {
+                    in_key = false;
+                    reading_key = false;
+                }
+                else if (in_value)
+                {
+                    in_value = false;
+                    reading_key = true;
+                    if (!key.empty())
+                    {
+                        m[key] = value;
+                        key.clear();
+                        value.clear();
+                    }
+                }
+            }
+            else if (in_key)
+                key += c;
+            else if (in_value)
+                value += c;
+        }
+        return m;
+    }
+
+public:
+    Json_Website() {}
+    Json_Website(const std::string &file_path) : file_path_(file_path) { load(); }
+
+    bool save() const
+    {
+        std::cout << "Saving website" << std::endl;
+
+        std::string tmp_file = file_path_ + ".tmp";
+        std::ofstream file(tmp_file);
+        if (!file.is_open())
+            return false;
+
+        file << "{\n";
+        file << "  \"devices\": [\n";
+
+        size_t count = 0;
+        for (const auto &[key, d] : devices_)
+        {
+            file << "    {\n";
+            file << "      \"name\": \"" << d.name << "\",\n";
+            file << "      \"type\": \"" << d.type << "\",\n";
+            file << "      \"location\": \"" << d.location << "\",\n";
+            file << "      \"data\": " << map_to_string(d.data) << ",\n";
+            file << "      \"controls\": " << map_to_string(d.controls) << "\n";
+            file << "    }";
+            if (++count < devices_.size())
+                file << ",";
+            file << "\n";
+        }
+
+        file << "  ]\n";
+        file << "}\n";
+
+        file.close();
+
+        fs::rename(tmp_file, file_path_);
+
+        return true;
+    }
+
+    bool load()
+    {
+        std::ifstream file(file_path_);
+        if (!file.is_open())
+            return false;
+
+        devices_.clear();
+        std::string line, json;
+        while (std::getline(file, line))
+            json += line;
+        file.close();
+
+        size_t pos = 0;
+        while ((pos = json.find("{", pos)) != std::string::npos)
+        {
+            size_t end = json.find("}", pos);
+            if (end == std::string::npos)
+                break;
+            std::string obj = json.substr(pos, end - pos + 1);
+
+            Device_Data d;
+            auto get_value = [&](const std::string &key) -> std::string
+            {
+                size_t k = obj.find("\"" + key + "\"");
+                if (k == std::string::npos)
+                    return "";
+                size_t colon = obj.find(":", k);
+                size_t q1 = obj.find("\"", colon + 1);
+                size_t q2 = obj.find("\"", q1 + 1);
+                if (q1 == std::string::npos || q2 == std::string::npos)
+                    return "";
+                return obj.substr(q1 + 1, q2 - q1 - 1);
+            };
+
+            d.name = get_value("name");
+            d.type = get_value("type");
+            d.location = get_value("location");
+
+            size_t data_pos = obj.find("\"data\"");
+            if (data_pos != std::string::npos)
+            {
+                size_t brace1 = obj.find("{", data_pos);
+                size_t brace2 = obj.find("}", brace1);
+                d.data = string_to_map(obj.substr(brace1, brace2 - brace1 + 1));
+            }
+
+            size_t ctrl_pos = obj.find("\"controls\"");
+            if (ctrl_pos != std::string::npos)
+            {
+                size_t brace1 = obj.find("{", ctrl_pos);
+                size_t brace2 = obj.find("}", brace1);
+                d.controls = string_to_map(obj.substr(brace1, brace2 - brace1 + 1));
+            }
+
+            if (!d.name.empty())
+                devices_[d.name] = d;
+
+            pos = end + 1;
+        }
+
+        return true;
+    }
+
+    void clear() { devices_.clear(); }
+
+    void init()
+    {
+        clear();
+    }
+
+    void parse_raw_data(Json_Device &website_raw)
+    {
+        auto messages = website_raw.get_dirty_data();
+        if (messages.empty())
+            return;
+
+        for (auto &message : messages)
+        {
+            auto tokens = smh::split_string(message, ':');
+            if (tokens.size() < 4)
+                continue;
+
+            std::string dev_name = tokens[0];
+            std::string msg_type = tokens[1];
+            std::string periph_name = tokens[2];
+            std::string periph_value = tokens[3];
+
+            auto it = devices_.find(dev_name);
+            if (it == devices_.end())
+            {
+                Device_Data new_device;
+                new_device.name = dev_name;
+                it = devices_.emplace(dev_name, new_device).first;
+            }
+
+            if (msg_type == "PERIPHERAL_S")
+            {
+                it->second.data[periph_name] = periph_value;
+            }
+            else if (msg_type == "PERIPHERAL_C")
+            {
+                it->second.controls[periph_name] = periph_value;
+            }
+        }
+
+        website_raw.clear_dirty_data();
+        save();
+    }
+
+    const std::map<std::string, Device_Data> &get_devices() const { return devices_; }
+    void add_device(const Device_Data &d) { devices_[d.name] = d; }
 };
