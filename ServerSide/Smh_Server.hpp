@@ -29,7 +29,6 @@ namespace smh
 
         Json_Server server_data;
         Json_Website website_data;
-        Json_Device raw_website_data;
 
         std::string website_json_name = "webs_device_ins";
 
@@ -125,8 +124,6 @@ namespace smh
                     client_device_uid = server_data.assign_new_uid(device_sw_mac);
 
                     client_device_json.set_uid(client_device_uid);
-                    client_device_json.add_subscriber(0);
-
                     // OPTIONAL: Add a way to contact all the other devices to tell them that a new device has appeared.
                     // So they could subsribe to their data
                 }
@@ -213,30 +210,33 @@ namespace smh
 
             handle_post_data(msg.get_payload_str(), device_data);
 
-            std::vector<int> subs = device_data.get_subscribers();
-            std::string payload = msg.get_payload_str();
-
             if (msg.get_payload_size() > 0)
+            {
+                std::vector<int> subs = device_data.get_subscribers();
+                std::string payload = msg.get_payload_str();
+                std::vector<std::string> messages = split_string(payload, ';');
+
                 for (int sub_uid : subs)
                 {
-                    std::optional<std::string> device_uid = server_data.try_get_device_by_uid(sub_uid);
+                    std::optional<std::string> sub_name = server_data.try_get_device_by_uid(sub_uid);
 
-                    if (device_uid == std::nullopt)
+                    if (sub_name == std::nullopt)
                         continue;
 
                     Json_Device sub_device;
                     {
                         std::lock_guard<std::mutex> lock(srv_json_mutex);
-                        file_helper.get_device_json(device_uid.value(), sub_device);
+                        file_helper.get_device_json(sub_name.value(), sub_device);
                     }
-
-                    auto messages = split_string(payload, ';');
 
                     for (auto message : messages)
                         sub_device.add_dirty_data(device_name + ":" + message);
                 }
 
-            website_data.parse_raw_data(raw_website_data);
+                for (std::string message : messages)
+                    website_data.parse_raw_data(device_name + ":" + message);
+                website_data.save();
+            }
 
             return true;
         }
@@ -397,11 +397,6 @@ namespace smh
                 std::cout << "Error creating server json" << std::endl;
             else
                 server_data = file_helper.get_server_json();
-
-            if (!file_helper.device_file_exists(website_json_name))
-                file_helper.create_and_init_device_file(website_json_name, raw_website_data);
-            else
-                file_helper.get_device_json(website_json_name, raw_website_data);
 
             if (!file_helper.website_json_exists())
                 file_helper.create_and_init_website_file(website_data);

@@ -56,15 +56,15 @@ int send(uint8_t *buffer, int size)
 
 int main(int argc, char const *argv[])
 {
-    std::string message = "";
+    std::string message = "PERIPHERAL_S:temperature:15.5;PERIPHERAL_S:lighting:10.4;PERIPHERAL_S:humidity:31.7";
 
-    smh::MessageHeader header = smh::create_header(5, SMH_SERVER_UID, MSG_POST, SMH_FLAG_NONE, 0);
+    smh::MessageHeader header = smh::create_header(3, SMH_SERVER_UID, MSG_POST, SMH_FLAG_NONE, message.size());
 
     std::vector<uint8_t> payload(message.size(), 0);
 
     std::copy(message.begin(), message.end(), payload.data());
 
-    smh::Message msg(header);
+    smh::Message msg(header, payload);
 
     if (!msg.is_valid())
     {

@@ -732,43 +732,29 @@ public:
         clear();
     }
 
-    void parse_raw_data(Json_Device &website_raw)
+    void parse_raw_data(const std::string &message)
     {
-        auto messages = website_raw.get_dirty_data();
-        if (messages.empty())
+        auto tokens = smh::split_string(message, ':');
+        if (tokens.size() < 4)
             return;
 
-        for (auto &message : messages)
+        std::string dev_name = tokens[0];
+        std::string msg_type = tokens[1];
+        std::string periph_name = tokens[2];
+        std::string periph_value = tokens[3];
+
+        auto it = devices_.find(dev_name);
+        if (it == devices_.end())
         {
-            auto tokens = smh::split_string(message, ':');
-            if (tokens.size() < 4)
-                continue;
-
-            std::string dev_name = tokens[0];
-            std::string msg_type = tokens[1];
-            std::string periph_name = tokens[2];
-            std::string periph_value = tokens[3];
-
-            auto it = devices_.find(dev_name);
-            if (it == devices_.end())
-            {
-                Device_Data new_device;
-                new_device.name = dev_name;
-                it = devices_.emplace(dev_name, new_device).first;
-            }
-
-            if (msg_type == "PERIPHERAL_S")
-            {
-                it->second.data[periph_name] = periph_value;
-            }
-            else if (msg_type == "PERIPHERAL_C")
-            {
-                it->second.controls[periph_name] = periph_value;
-            }
+            Device_Data new_device;
+            new_device.name = dev_name;
+            it = devices_.emplace(dev_name, new_device).first;
         }
 
-        website_raw.clear_dirty_data();
-        save();
+        if (msg_type == "PERIPHERAL_S")
+            it->second.data[periph_name] = periph_value;
+        else if (msg_type == "PERIPHERAL_C")
+            it->second.controls[periph_name] = periph_value;
     }
 
     const std::map<std::string, Device_Data> &get_devices() const { return devices_; }
