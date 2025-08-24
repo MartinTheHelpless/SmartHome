@@ -5,6 +5,7 @@
 #include <iterator>
 #include <memory>
 #include <exception>
+#include <iomanip>
 
 #include "Utils/Defines.hpp"
 #include "Comms/Message.hpp"
@@ -335,8 +336,6 @@ namespace smh
             for (const auto &[peripheral, value] : peripherals_controls)
                 data += string_format("PERIPHERAL_C:%s:%s;", peripheral.c_str(), value.c_str());
 
-            data[data.length() - 1] = 0;
-
             MessageHeader header = create_header(device_uid_, SMH_SERVER_UID, MSG_POST);
 
             std::vector<uint8_t> payload(data.length(), 0);
@@ -365,9 +364,11 @@ namespace smh
             peripherals_controls[control] = value;
         }
 
-        void set_sensor_value(std::string sensor, std::string value)
+        void set_sensor_value(std::string sensor, double value)
         {
-            peripherals_sensors[sensor] = value;
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(1) << value; // 1 decimal place
+            peripherals_sensors[sensor] = oss.str();
         }
     };
 }

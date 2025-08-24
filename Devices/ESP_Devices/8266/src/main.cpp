@@ -93,8 +93,8 @@ void loop()
     float h = dht.readHumidity();
     Serial.printf("Temp: %.1f °C  Hum: %.1f %%\n", t, h);
 
-    device.set_sensor_value("temperature", std::to_string(t));
-    device.set_sensor_value("humidity", std::to_string(h));
+    device.set_sensor_value("temperature", t);
+    device.set_sensor_value("humidity", h);
     device.send_peripheral_data_to_server();
     delay(2000);
 }
