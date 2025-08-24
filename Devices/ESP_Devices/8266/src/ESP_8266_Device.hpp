@@ -34,21 +34,19 @@ namespace smh
 
         uint8_t device_uid_ = 0;
 
-        std::string server_ip_ = "10.42.0.1";
+        std::string server_ip_ = "192.168.1.100";
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
-        std::string ssid = "tmp_netw";
-        std::string password = "password";
+        std::string ssid = "STARNET-Burian";
+        std::string password = "pilir3453";
 
-        std::vector<std::pair<std::string, std::string>> peripherals_sensors = {
+        std::map<std::string, std::string> peripherals_sensors = {
             {"temperature", "1200.7"},
             {"pressure", "1800.4"},
             {"humidity", "45.0"},
-            {"UV", "6"}
+            {"UV", "6"}};
 
-        };
-
-        std::vector<std::pair<std::string, std::string>> peripherals_controls = {
+        std::map<std::string, std::string> peripherals_controls = {
             {"LED", "on_OFF"}
 
         }; // TODO: Add peripheral send logic to init message on server and here
@@ -183,6 +181,7 @@ namespace smh
                 auto control_messages = split_string(msg->get_payload_str().c_str(), ';');
                 for (auto message : control_messages)
                 {
+                    Serial.println(msg->get_payload_str().c_str());
                     auto periph_action = split_string(message.c_str(), ':');
                     if (periph_action.size() != 2)
                         continue;
@@ -193,13 +192,13 @@ namespace smh
                         {
                             Serial.println("Turning LED ON");
                             digitalWrite(LED_BUILTIN, LOW);
-                            peripherals_controls[periph_action] = "ON_off";
+                            peripherals_controls[periph_action[0]] = "ON_off";
                         }
                         else if (periph_action[1] == "OFF")
                         {
                             Serial.println("Turning LED OFF");
                             digitalWrite(LED_BUILTIN, HIGH);
-                            peripherals_controls[periph_action] = "on_OFF";
+                            peripherals_controls[periph_action[0]] = "on_OFF";
                         }
                         else
                             Serial.printf("Unknown action \"%s\" on peripheral %s",
@@ -325,7 +324,7 @@ namespace smh
 
         bool send_peripheral_data_to_server()
         {
-            if (peripherals_sensors.size() | peripherals_controls.size() == 0)
+            if ((peripherals_sensors.size() | peripherals_controls.size()) == 0)
                 return send_ping_to_server();
 
             std::string data;
@@ -359,6 +358,16 @@ namespace smh
             Serial.println("Sent ping (keepalive) to server");
             client_out.stop();
             return result;
+        }
+
+        void set_control_value_to(std::string control, std::string value)
+        {
+            peripherals_controls[control] = value;
+        }
+
+        void set_sensor_value(std::string sensor, std::string value)
+        {
+            peripherals_sensors[sensor] = value;
         }
     };
 }

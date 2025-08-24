@@ -1,5 +1,11 @@
 
 #include "ESP_8266_Device.hpp"
+#include <DHT.h>
+
+#define DHTPIN 2 // GPIO number, not Dx label
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
 
 smh::ESP8266_Device device("test_device_out");
 
@@ -27,7 +33,8 @@ void setup()
     if (!device.Init())
         return;
 
-    delay(1500);
+    pinMode(A0, INPUT);
+    dht.begin();
 
     // device.send_peripheral_data_to_server();
 
@@ -54,10 +61,25 @@ void send_controll_message(bool on)
     device.send_message_to_server(msg);
 }
 
+void send_controll_data_message(int value)
+{
+    std::string message = string_format("%d", value);
+
+    std::vector<uint8_t> payload(message.size(), 0);
+
+    std::copy(message.begin(), message.end(), payload.data());
+
+    smh::MessageHeader header = smh::create_header(device.get_uid(), device.get_uid(), MSG_CONTROL, SMH_FLAG_NONE, payload.size());
+
+    std::shared_ptr<smh::Message> msg = std::make_shared<smh::Message>(header, payload);
+
+    device.send_message_to_server(msg);
+}
+
 void loop()
 {
     device.check_incomming_message(server);
-    delay(5);
+    /*
     if (test == 200)
         send_controll_message(false), ++test;
     else if (test == 400)
@@ -65,4 +87,14 @@ void loop()
             test = 0;
     else
         ++test;
+    */
+
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+    Serial.printf("Temp: %.1f °C  Hum: %.1f %%\n", t, h);
+
+    device.set_sensor_value("temperature", std::to_string(t));
+    device.set_sensor_value("humidity", std::to_string(h));
+    device.send_peripheral_data_to_server();
+    delay(2000);
 }

@@ -210,6 +210,10 @@ namespace smh
 
             handle_post_data(msg.get_payload_str(), device_data);
 
+            for (unsigned char c : msg.get_payload_str())
+                printf("%02X ", c);
+            printf("\n");
+
             if (msg.get_payload_size() > 0)
             {
                 std::vector<int> subs = device_data.get_subscribers();
