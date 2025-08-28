@@ -1,6 +1,6 @@
 #include <string>
 #include <Arduino.h>
-#include <esp8266WIFi.h>
+#include <ESP8266WiFi.h>
 
 #include <iterator>
 #include <memory>
@@ -30,36 +30,29 @@ namespace smh
     class ESP8266_Device
     {
     protected:
-        std::string ip_ = "";
-        std::string device_name_ = "";
+        std::string ip_;
+        std::string device_name_;
 
         uint8_t device_uid_ = 0;
 
-        std::string server_ip_ = "192.168.1.100";
+        std::string server_ip_ = DEFAULT_SERVER_IP;
         uint16_t server_port_ = DEFAULT_SERVER_PORT;
 
-        std::string ssid = "STARNET-Burian";
-        std::string password = "pilir3453";
+        std::string ssid;
+        std::string password;
 
-        std::map<std::string, std::string> peripherals_sensors = {
-            {"temperature", "1200.7"},
-            {"pressure", "1800.4"},
-            {"humidity", "45.0"},
-            {"UV", "6"}};
+        std::map<std::string, std::string> peripherals_sensors;
+        std::map<std::string, std::string> peripherals_controls;
 
-        std::map<std::string, std::string> peripherals_controls = {
-            {"LED", "on_OFF"}
-
-        }; // TODO: Add peripheral send logic to init message on server and here
+        // TODO: Add peripheral send logic to init message on server and here
         // Peripherals will be sent with their data, not in inti message.
         // if new peripherals added, no need for init to have that, only get data
         // and send with peripheral type/name
 
-        WiFiClient client_out;
-        WiFiClient client_in;
+        WiFiClient client_out, client_in;
+        WiFiServer server;
 
-        std::vector<uint8_t>
-        readSocket(WiFiClient &client, int to_read = MAX_MESSAGE_SIZE)
+        std::vector<uint8_t> readSocket(WiFiClient &client, int to_read = MAX_MESSAGE_SIZE)
         {
             if (!client.connected())
                 return std::vector<uint8_t>();
@@ -118,7 +111,95 @@ namespace smh
             return std::make_shared<Message>(header, payload);
         }
 
+        bool connect_to_wifi()
+        {
+            Serial.begin(115200);
+            WiFi.begin(ssid.c_str(), password.c_str());
+            Serial.print("\nConnecting to Wi-Fi");
+
+            unsigned long start = millis();
+            while (WiFi.status() != WL_CONNECTED)
+            {
+                if (millis() - start > 10000)
+                { // 10s timeout
+                    Serial.println("\nWiFi connect failed!");
+                    return false;
+                }
+                delay(500); // yields to FreeRTOS
+                Serial.print(".");
+            }
+            Serial.println("\nWi-Fi connected!");
+            Serial.print("ESP IP address: ");
+            Serial.println(WiFi.localIP());
+            return true;
+        }
+
+        bool connect_to_server()
+        {
+            if (!client_out.connected())
+            {
+                Serial.printf("Trying to connect to a server on %s:%d\n", server_ip_.c_str(), server_port_);
+                if (client_out.connect(server_ip_.c_str(), server_port_))
+                    Serial.println("Connected to server!");
+                else
+                {
+                    Serial.println("Failed to connect to server");
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool send_init_message()
+        {
+            MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG, device_name_.length());
+
+            std::vector<uint8_t> payload(device_name_.length(), 0);
+            std::copy(device_name_.begin(), device_name_.end(), payload.begin());
+
+            std::shared_ptr<Message> msg = std::make_shared<Message>(header, payload);
+
+            return send_message_to_server(msg);
+        }
+
+        virtual void handle_msg_received(const std::shared_ptr<Message> &msg) = 0;
+
     public:
+        ESP8266_Device() = delete;
+
+        ESP8266_Device(std::string device_name, std::string wifi_ssid, std::string wifi_pass,
+                       std::string server_ip = DEFAULT_SERVER_IP, uint16_t srv_port = DEFAULT_SERVER_PORT)
+            : device_name_(device_name), server_ip_(server_ip), server_port_(srv_port), ssid(wifi_ssid), password(wifi_pass), server(srv_port)
+        {
+            server.begin();
+        }
+        ~ESP8266_Device() = default;
+
+        bool Init()
+        {
+            connect_to_wifi();
+            if (!connect_to_server())
+                return false;
+
+            send_init_message();
+
+            std::shared_ptr<Message> init_server_msg = receive_msg(); // This will be a response the the init message containing this device's UID
+
+            if (!init_server_msg->is_valid())
+            {
+                Serial.println("Received init message from server is invalid");
+                return false;
+            }
+
+            device_uid_ = init_server_msg->get_header_dest_uid();
+
+            client_out.stop();
+
+            Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
+
+            return true;
+        }
+
         bool send_message_to_server(std::shared_ptr<Message> msg)
         {
             if (!client_out.connected() && !connect_to_server())
@@ -172,50 +253,9 @@ namespace smh
             return std::make_shared<Message>(header, payload);
         }
 
-        virtual void handle_msg_received(const std::shared_ptr<Message> &msg)
+        void check_incomming_message()
         {
-            switch (msg->get_message_type())
-            {
-            case Smh_Msg_Type::MSG_CONTROL:
-            {
-                Serial.println("Received control message");
-                auto control_messages = split_string(msg->get_payload_str().c_str(), ';');
-                for (auto message : control_messages)
-                {
-                    Serial.println(msg->get_payload_str().c_str());
-                    auto periph_action = split_string(message.c_str(), ':');
-                    if (periph_action.size() != 2)
-                        continue;
-
-                    if (periph_action[0] == "LED")
-                    {
-                        if (periph_action[1] == "ON")
-                        {
-                            Serial.println("Turning LED ON");
-                            digitalWrite(LED_BUILTIN, LOW);
-                            peripherals_controls[periph_action[0]] = "ON_off";
-                        }
-                        else if (periph_action[1] == "OFF")
-                        {
-                            Serial.println("Turning LED OFF");
-                            digitalWrite(LED_BUILTIN, HIGH);
-                            peripherals_controls[periph_action[0]] = "on_OFF";
-                        }
-                        else
-                            Serial.printf("Unknown action \"%s\" on peripheral %s",
-                                          periph_action[1].c_str(), periph_action[0].c_str());
-                    }
-                }
-                break;
-            }
-            default:
-                break;
-            }
-        }
-
-        void check_incomming_message(WiFiServer &server)
-        {
-            client_in = server.available();
+            client_in = server.accept();
             if (client_in)
             {
                 Serial.println("Client connected!");
@@ -239,89 +279,6 @@ namespace smh
         }
 
         uint8_t get_uid() { return device_uid_; }
-
-        ESP8266_Device(std::string device_name) : device_name_(device_name)
-        {
-            pinMode(LED_BUILTIN, OUTPUT);
-            digitalWrite(LED_BUILTIN, HIGH);
-        }
-        ~ESP8266_Device() {}
-
-        bool Init()
-        {
-            connect_to_wifi();
-            if (!connect_to_server())
-                return false;
-
-            send_init_message();
-
-            std::shared_ptr<Message> init_server_msg = receive_msg(); // This will be a response the the init message containing this device's UID
-
-            if (!init_server_msg->is_valid())
-            {
-                Serial.println("Received init message from server is invalid");
-                return false;
-            }
-
-            device_uid_ = init_server_msg->get_header_dest_uid();
-
-            client_out.stop();
-
-            Serial.printf("This Devices's assigned UID: %d\nDevice initialization successful\n", device_uid_);
-
-            return true;
-        }
-
-        bool connect_to_wifi()
-        {
-            Serial.begin(115200);
-            WiFi.begin(ssid.c_str(), password.c_str());
-            Serial.print("\nConnecting to Wi-Fi");
-
-            unsigned long start = millis();
-            while (WiFi.status() != WL_CONNECTED)
-            {
-                if (millis() - start > 10000)
-                { // 10s timeout
-                    Serial.println("\nWiFi connect failed!");
-                    return false;
-                }
-                delay(500); // yields to FreeRTOS
-                Serial.print(".");
-            }
-            Serial.println("\nWi-Fi connected!");
-            Serial.print("ESP IP address: ");
-            Serial.println(WiFi.localIP());
-            return true;
-        }
-
-        bool connect_to_server()
-        {
-            if (!client_out.connected())
-            {
-                Serial.printf("Trying to connect to a server on %s:%d\n", server_ip_.c_str(), server_port_);
-                if (client_out.connect(server_ip_.c_str(), server_port_))
-                    Serial.println("Connected to server!");
-                else
-                {
-                    Serial.println("Failed to connect to server");
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        bool send_init_message()
-        {
-            MessageHeader header = create_header(0, SMH_SERVER_UID, MSG_POST, SMH_FLAG_IS_INIT_MSG, device_name_.length());
-
-            std::vector<uint8_t> payload(device_name_.length(), 0);
-            std::copy(device_name_.begin(), device_name_.end(), payload.begin());
-
-            std::shared_ptr<Message> msg = std::make_shared<Message>(header, payload);
-
-            return send_message_to_server(msg);
-        }
 
         bool send_peripheral_data_to_server()
         {
@@ -359,16 +316,8 @@ namespace smh
             return result;
         }
 
-        void set_control_value_to(std::string control, std::string value)
-        {
-            peripherals_controls[control] = value;
-        }
+        void set_peripherals_sensors(const std::map<std::string, std::string> sensors) { peripherals_sensors = sensors; }
 
-        void set_sensor_value(std::string sensor, double value)
-        {
-            std::ostringstream oss;
-            oss << std::fixed << std::setprecision(1) << value; // 1 decimal place
-            peripherals_sensors[sensor] = oss.str();
-        }
+        void set_peripherals_controls(const std::map<std::string, std::string> controls) { peripherals_controls = controls; }
     };
 }
