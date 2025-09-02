@@ -640,8 +640,6 @@ public:
 
     bool save() const
     {
-        std::cout << "Saving website" << std::endl;
-
         std::string tmp_file = file_path_ + ".tmp";
         std::ofstream file(tmp_file);
         if (!file.is_open())
