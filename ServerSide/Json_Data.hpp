@@ -240,7 +240,14 @@ public:
 
     bool save() const
     {
+
         std::string tmp_file_path = file_path_ + ".tmp";
+        if (fs::exists(fs::path(tmp_file_path)))
+        {
+            std::cerr << "FIle " << tmp_file_path << " was not found, json not saved" << std::endl;
+            return false;
+        }
+
         std::ofstream file(tmp_file_path);
         if (!file.is_open())
             return false;
@@ -481,6 +488,12 @@ public:
 
     bool save() const
     {
+        if (fs::exists(fs::path(file_path_)))
+        {
+            std::cerr << "Server file does not exist" << std::endl;
+            return false;
+        }
+
         std::ofstream file(file_path_);
         if (!file.is_open())
             return false;
