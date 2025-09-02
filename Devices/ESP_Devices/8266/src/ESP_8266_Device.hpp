@@ -171,15 +171,18 @@ namespace smh
                        std::string server_ip = DEFAULT_SERVER_IP, uint16_t srv_port = DEFAULT_SERVER_PORT)
             : device_name_(device_name), server_ip_(server_ip), server_port_(srv_port), ssid(wifi_ssid), password(wifi_pass), server(srv_port)
         {
-            server.begin();
         }
         ~ESP8266_Device() = default;
 
         bool Init()
         {
-            connect_to_wifi();
-            if (!connect_to_server())
+            if (!connect_to_wifi())
                 return false;
+
+            server.begin();
+
+            while (!connect_to_server())
+                delay(2000);
 
             send_init_message();
 

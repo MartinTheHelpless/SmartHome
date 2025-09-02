@@ -7,7 +7,7 @@
 
 DHT dht(DHTPIN, DHTTYPE);
 
-smh::Temp_Sensor device("Pergola Meteostation Outside", "STARNET-Burian", "pilir3453");
+smh::Temp_Sensor device("Pergola Meteostation Outside", "ssid", "pass");
 
 void setup()
 {
