@@ -63,6 +63,15 @@
         "fstream": "cpp",
         "span": "cpp",
         "variant": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "csignal": "cpp",
+        "any": "cpp",
+        "complex": "cpp",
+        "coroutine": "cpp",
+        "list": "cpp",
+        "set": "cpp",
+        "source_location": "cpp",
+        "shared_mutex": "cpp",
+        "typeindex": "cpp"
     }
 }
