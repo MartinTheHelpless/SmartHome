@@ -1,5 +1,8 @@
+#include <memory>
 #include <cstdint>
 #include <boost/asio.hpp>
+
+#include "MessageHandler.hpp"
 
 using boost::asio::ip::tcp;
 namespace bas = boost::asio;
@@ -10,7 +13,10 @@ class Server
 private:
     short unsigned int port_ = 6666;
 
+    MessageHandler msg_handler_;
+
     boost::asio::io_context io_context_;
+
     basip::tcp::endpoint endpoint_;
     basip::tcp::acceptor acceptor_;
 
